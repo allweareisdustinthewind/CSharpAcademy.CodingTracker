@@ -1,7 +1,5 @@
 ﻿using CodingTracker.Database;
-using Microsoft.VisualBasic;
 using Spectre.Console;
-using System.Text.RegularExpressions;
 
 namespace CodingTracker.UI;
 
@@ -13,13 +11,16 @@ internal class SessionsTable
 {
    Table? _table;
 
-   CodingProject _proj;
+   CodingProject ?_proj;
    List<CodingSession>? _sessions;
    HashSet<int> _changedSessions = new ();
    int _selectedLine;
    int _selectedColumn = 1;
 
-   public SessionsTable (CodingProject proj)
+   int _columnToSort = -1;
+   bool _sortInAscOrder = false;
+
+   public SessionsTable (CodingProject ?proj)
    {
       if (proj == null)
          return;
@@ -33,18 +34,26 @@ internal class SessionsTable
          return;
       }
 
-      CreateEmptyTable ();
       FillTable ();
    }
 
    void CreateEmptyTable ()
    {
-      _table = Gui.CreateTable ([ "ID", "Start", "End", "Duration (hh:mm)"]);
+      string [] columns = ["ID", "Start", "End", "Duration (hh:mm)"];
+      if (_columnToSort >= 0)
+      {
+         string str = _sortInAscOrder ? " (asc)" : " (desc)";
+         columns [_columnToSort] += str;
+      }
+
+      _table = Gui.CreateTable (columns);
    }
 
    void FillTable ()
    {
-      if (_table == null || _sessions == null || _sessions.Count <= 0)
+      CreateEmptyTable ();
+
+      if (_sessions == null || _sessions.Count <= 0)
          return;
 
       for (int i = 0; i < _sessions.Count; ++i)
@@ -52,14 +61,14 @@ internal class SessionsTable
          var session = _sessions [i];
          bool isChanged = _changedSessions.Contains (session.Id);
          string strID = isChanged ? $"{i + 1}*" : $"{i + 1}";
-         _table.AddRow (FormatText (strID,                           isChanged), 
-                        FormatText (session.GetStartTimeAsString (), isChanged), 
-                        FormatText (session.GetEndTimeAsString (),   isChanged),
-                        FormatText (session.GetDuration (),          isChanged));
+         _table.AddRow (FormatTextAsChanged (strID,                           isChanged), 
+                        FormatTextAsChanged (session.GetStartTimeAsString (), isChanged), 
+                        FormatTextAsChanged (session.GetEndTimeAsString (),   isChanged),
+                        FormatTextAsChanged (session.GetDuration (),          isChanged));
       }
    }
 
-   string FormatText (string text, bool changed)
+   string FormatTextAsChanged (string text, bool changed)
    {
       if (!changed)
          return text;
@@ -72,7 +81,7 @@ internal class SessionsTable
       if (_table == null)
          return;
 
-      UpdateCurrentCell (select: true);
+      UpdateCurrentCell ();
       ProcessInput ();
    }
 
@@ -84,11 +93,14 @@ internal class SessionsTable
       footer.AddColumn ("Key2", col => col.RightAligned ());
       footer.AddColumn ("Desc2");
 
-      footer.AddRow ("[blue]  Left[/]",  "- move left",                    "[blue]  Right[/]",  "- move right");
-      footer.AddRow ("[blue]  Home[/]",  "- move to first record in line", "[blue]  End[/]",    "- move to last record in line");
-      footer.AddRow ("[blue]  Up[/]",    "- move up",                      "[blue]  Down[/]",   "- move down");
-      footer.AddRow ("[blue]  PgUp[/]",  "- move to first record",         "[blue]  PgDown[/]", "- move to last record");
-      footer.AddRow ("[blue]  Enter[/]", "- change record",                "[blue]  Del[/]",    "- delete this session");
+      footer.AddRow ("[blue]  Left[/]",  "- move left",                          "[blue]  Right[/]",  "- move right");
+      footer.AddRow ("[blue]  Home[/]",  "- move to first record in line",       "[blue]  End[/]",    "- move to last record in line");
+      footer.AddRow ("[blue]  Up[/]",    "- move up",                            "[blue]  Down[/]",   "- move down");
+      footer.AddRow ("[blue]  PgUp[/]",  "- move to first record",               "[blue]  PgDown[/]", "- move to last record");
+      footer.AddRow ("[blue]  Enter[/]", "- change record",                      "[blue]  Del[/]",    "- delete this session");
+      footer.AddRow ("[blue]  A[/]",     "- add a new session",                  "[blue]  Space[/]",  "- sort data in active column");
+      footer.AddRow ("[blue]  C[/]",     "- configure filter for active column", "[blue]  F[/]",      "- activate / deactivate filter in current column");
+
 
       if (_changedSessions.Count <= 0)
          footer.AddRow ("[blue]  Esc[/]", "- back to main menu", string.Empty,   string.Empty);
@@ -101,32 +113,18 @@ internal class SessionsTable
 
    void ProcessInput ()
    {
-      Console.CursorVisible = false;
-
       for (; ; )
       {
          var keyCode = Console.ReadKey (true).Key;
-         if (keyCode == ConsoleKey.Escape)
-         {
-            if (_changedSessions.Count > 0)
-            {
-               Gui.Info ("There are some changed records.", makeDelay: false);
-               AnsiConsole.WriteLine ();
-
-               if (Gui.Ask ("Would you like to save the changes in database?"))
-               {
-                  if (SaveChanges (updateGUI: false))
-                     break;
-               }
-            }
-            else
-               break;
-
-            UpdateCurrentCell (select: true);
-         }
 
          switch (keyCode)
          {
+            case ConsoleKey.Escape:
+               if (LeaveMenu ())
+                  return;
+
+               break;
+
             case ConsoleKey.UpArrow:
                MoveVertical (moveUp: true);
                break;
@@ -169,6 +167,14 @@ internal class SessionsTable
                CorrectRecord (); 
                break;
 
+            case ConsoleKey.A:
+               AddNewSession ();
+               break;
+
+            case ConsoleKey.Spacebar:
+               SortData ();
+               break;
+
             case ConsoleKey.S:
                SaveChanges (updateGUI: true);
                break;
@@ -176,14 +182,103 @@ internal class SessionsTable
       }
    }
 
-   bool SaveChanges (bool updateGUI)
+   bool LeaveMenu ()
    {
       if (_changedSessions.Count <= 0)
          return true;
 
-      var sessionsToUpdate = _sessions.Where (x => _changedSessions.Contains (x.Id)).ToList ();
+      Gui.Info ("There are some changed records.");
+      AnsiConsole.WriteLine ();
 
-      if (ValidateChangedRecords (sessionsToUpdate))
+      if (Gui.Ask ("Would you like to save the changes in database?"))
+      {
+         if (SaveChanges (updateGUI: false))
+            return true;
+      }
+      else
+         return true; // Exit without saving changes
+
+      UpdateCurrentCell ();
+      return false;
+   }
+
+   void AddNewSession ()
+   {
+      if (_proj == null || _sessions == null)
+         return;
+
+      string [] param  = ["Start date", "Start time", "End date", "End time"];
+      List<string> values = new ();
+      for (int i = 0; i < param.Length; ++i)
+      {
+         string data = i % 2 == 0 ? Gui.AskDate (param [i]) : Gui.AskTime (param [i]);
+         if (string.IsNullOrEmpty (data))
+         {
+            UpdateCurrentCell ();
+            return;
+         }
+
+         values.Add (data);
+      }
+
+      var session = CodingSession.Create (values [0], values [1], values [2], values [3]);
+
+      bool isDataCorrect = ValidateSessions ([.. _sessions, session]);
+      if (isDataCorrect)
+      {
+         DbManager.AddNewSession (session, _proj.Id);
+         _sessions.Add (session);
+         FillTable ();
+      }
+
+      UpdateCurrentCell ();
+   }
+
+   void SortData ()
+   {
+      if (_sessions == null || _sessions.Count <= 0)
+         return;
+
+      if (_columnToSort == _selectedColumn)
+         _sortInAscOrder = !_sortInAscOrder;
+      else
+         _columnToSort = _selectedColumn;
+
+      if (_columnToSort == 1) // Sort by "Start time"
+      {
+         if (_sortInAscOrder)
+            _sessions.Sort ((x, y) => x.GetStartTime ().CompareTo (y.GetStartTime ()));
+         else
+            _sessions.Sort ((x, y) => y.GetStartTime ().CompareTo (x.GetStartTime ()));
+      }
+      else if (_columnToSort == 2) // Sort by "End time"
+      {
+         if (_sortInAscOrder)
+            _sessions.Sort ((x, y) => x.GetEndTime ().CompareTo (y.GetEndTime ()));
+         else
+            _sessions.Sort ((x, y) => y.GetEndTime ().CompareTo (x.GetEndTime ()));
+      }
+      else // Sort by "Duration"
+      {
+         if (_sortInAscOrder)
+            _sessions.Sort ((x, y) => x.GetDuration ().CompareTo (y.GetDuration ()));
+         else
+            _sessions.Sort ((x, y) => y.GetDuration ().CompareTo (x.GetDuration ()));
+      }
+
+      FillTable ();
+      UpdateCurrentCell ();
+   }
+
+   bool SaveChanges (bool updateGUI)
+   {
+      if (_sessions == null || _changedSessions.Count <= 0)
+         return true;
+
+      var sessionsToUpdate = _sessions.Where (x => _changedSessions.Contains (x.Id)).ToList ();
+      bool isDataCorrect = ValidateSessions (sessionsToUpdate);
+
+      if (isDataCorrect)
       {
          DbManager.UpdateSessions (sessionsToUpdate);
          _changedSessions.Clear ();
@@ -191,38 +286,42 @@ internal class SessionsTable
 
       if (updateGUI)
       {
-         CreateEmptyTable ();
          FillTable ();
-         UpdateCurrentCell (select: true);
+         UpdateCurrentCell ();
       }
 
-      return true;
+      return isDataCorrect;
    }
 
-   bool ValidateChangedRecords (List <CodingSession> sessionsToCheck)
+   bool ValidateSessions (List <CodingSession> sessionsToCheck)
    {
       if (sessionsToCheck == null || sessionsToCheck.Count <= 0)
          return true;
 
-      var times = sessionsToCheck.Select (x => new { x.Id, StartTime = x.GetStartTime (), EndTime = x.GetEndTime () }).ToList ();
-      var badTime = times.FirstOrDefault (x => x.StartTime >= x.EndTime);
+      // Check, if there is a session, which starts after its ending
+      var badTime = sessionsToCheck.FirstOrDefault (x => x.GetStartTime () > x.GetEndTime ());
       if (badTime != null)
       {
-         Gui.Exception ($"Start time of session {badTime.Id} is more or equal as its end time");
+         Gui.Exception ($"The session {badTime.GetInfo ()} ended before starting");
          return false;
       }
 
-      foreach (var session in _sessions)
+      // Search for a session, which intersects with some other session
+      for (int i = 0; i < sessionsToCheck.Count; ++i)
       {
-         if (_changedSessions.Contains (session.Id))
-            continue;
-
-         var intersect = times.FirstOrDefault (x => session.GetEndTime () >= x.StartTime && session.GetStartTime () <= x.EndTime);
-         if (intersect == null)
-            continue;
-
-         Gui.Exception ($"False date / time: the sessions with ids {intersect.Id} and {session.Id} are overlapped");
-         return false;
+         var session = sessionsToCheck [i];
+         var startTime = session.GetStartTime ();
+         var endTime = session.GetEndTime ();
+         for (int j = i + 1; j < sessionsToCheck.Count; ++j)
+         {
+            var intersect = sessionsToCheck [j];
+            if (intersect.GetStartTime () < endTime && intersect.GetEndTime () > startTime)
+            {
+               AnsiConsole.WriteLine ();
+               Gui.Exception ($"The following sessions are overlapped:\n    - {session.GetInfo ()}\n    - {intersect.GetInfo ()}");
+               return false;
+            }
+         }
       }
 
       return true;
@@ -260,7 +359,7 @@ internal class SessionsTable
          }
       }
 
-      UpdateCurrentCell (select: true);
+      UpdateCurrentCell ();
    }
 
    /// <summary>
@@ -295,13 +394,13 @@ internal class SessionsTable
          }
       }
 
-      UpdateCurrentCell (select: true);
+      UpdateCurrentCell ();
    }
 
    /// <summary>
    /// Shows actial line or cell as selected
    /// </summary>
-   void UpdateCurrentCell (bool select)
+   void UpdateCurrentCell (bool select = true)
    {
       if (_sessions == null || _table == null)
          return;
@@ -324,11 +423,10 @@ internal class SessionsTable
       if (select)
          text = $"[black on yellow]{text}[/]";
       else
-         text = FormatText (text, isChanged);
+         text = FormatTextAsChanged (text, isChanged);
 
       _table.UpdateCell (_selectedLine, _selectedColumn, new Markup (text));
 
-      AnsiConsole.Clear ();
       Gui.ShowMainTitel ();
       AnsiConsole.Write (_table);
       ShowFooter ();
@@ -343,24 +441,24 @@ internal class SessionsTable
       if (_sessions == null || _table == null)
          return true;
 
-      Gui.Info ($"The session [green]#{_selectedLine + 1}[/] will be deleted.", makeDelay: false);
+      Gui.Info ($"The session [green]#{_selectedLine + 1}[/] will be deleted.");
       AnsiConsole.WriteLine ();
 
       if (!Gui.Ask ("Are you sure?"))
       {
-         UpdateCurrentCell (select: true);
+         UpdateCurrentCell ();
          return true;
       }
 
       var session = _sessions [_selectedLine];
       DbManager.DeleteSession (session.Id);
-
       _sessions.RemoveAt (_selectedLine);
+
       if (_sessions.Count <= 0)
       {
          if (_proj != null)
          {
-            Gui.Info ($"The project [green]'{_proj.Name}'[/] has no more sessions.", makeDelay: false);
+            Gui.Info ($"The project [green]'{_proj.Name}'[/] has no more sessions.");
             AnsiConsole.WriteLine ();
             if (Gui.Ask ("Would you like to delete it as well?"))
                DbManager.DeleteProject (_proj.Id);
@@ -372,9 +470,8 @@ internal class SessionsTable
       if (_selectedLine >= _sessions.Count)
          _selectedLine = _sessions.Count - 1;
 
-      CreateEmptyTable ();
       FillTable ();
-      UpdateCurrentCell (select: true);
+      UpdateCurrentCell ();
 
       return true;
    }
@@ -396,106 +493,56 @@ internal class SessionsTable
       if (isDataChanged)
       {
          _changedSessions.Add (_sessions [_selectedLine].Id);
-         CreateEmptyTable ();
          FillTable ();
       }
 
-      UpdateCurrentCell (select: true);
+      UpdateCurrentCell ();
    }
 
    bool CorrectDateTime ()
    {
+      if (_sessions == null)
+         return true;
+
       bool isChanged = false;
       var session = _sessions [_selectedLine];
 
       DateTime dt;
-      string name, value;
+      string nameDate, nameTime;
       if (_selectedColumn == 1)
       {
          dt = session.GetStartTime ();
-         name = "Start time";
-         value = session.GetStartTimeAsString ();
+         nameDate = "Start date";
+         nameTime = "Start time";
       }
       else
       {
          dt = session.GetEndTime ();
-         name = "End time";
-         value = session.GetEndTimeAsString ();
+         nameDate = "End date";
+         nameTime = "End time";
       }
 
-      string prevDate = dt.ToString ("dd.MM.yyyy");
-      string prevTime = dt.ToString ("HH:mm");
+      string curDate = dt.ToString ("dd.MM.yyyy");
+      string curTime = dt.ToString ("HH:mm");
 
-      string newDate = string.Empty;
-      string newValue;
+      // Ask user about new date / time for changed session and not allow him to enter incorrect values 
+      string newDate = Gui.AskDate (nameDate, curDate);
+      if (string.IsNullOrEmpty (newDate))
+         return false;
 
-      // Ask a new data until all inputs will be correct  
-      for (; ; )
+      string newTime = Gui.AskTime (nameTime, curTime);
+      if (string.IsNullOrEmpty (newTime))
+         return false;
+
+      isChanged = newDate != curDate || newTime != curTime;
+
+      // Transfer entered data in actual record
+      if (isChanged)
       {
-         Console.Clear ();
-         Gui.ShowMainTitel ();
-
-         AnsiConsole.WriteLine ();
-         AnsiConsole.Markup ($"Actual value of property [green]'{name}'[/]: {value}\n");
-
-         if (!string.IsNullOrEmpty (newDate))
-            AnsiConsole.MarkupLine ($"[green]Entered date:[/] {newDate}");
+         if (_selectedColumn == 1)
+            session.SetStartDateTime (newDate, newTime);
          else
-         {
-            AnsiConsole.MarkupLine ("Please enter the date in Format [green]'dd.mm.yyyy'[/].");
-            AnsiConsole.MarkupLine ("You can write [green]'now'[/] to choose actual date or press [green]'Enter'[/] to make no changes in date.");
-            newValue = Gui.GetUserInput ($"New date: ");
-            if (string.IsNullOrEmpty (newValue))
-               newValue = prevDate;
-            else if (string.Compare (newValue.Trim (), "now", StringComparison.OrdinalIgnoreCase) == 0)
-               newValue = DateTime.Now.ToString ("dd.MM.yyyy");
-            else
-            {
-               if (!CheckDate (newValue.Trim ()))
-               {
-                  Gui.Exception ("The date was entered in wrong format");
-                  continue;
-               }
-            }
-
-            newDate = newValue.Trim ();
-            if (newDate != prevDate)
-               isChanged = true;
-
-            continue;
-         }
-
-         AnsiConsole.MarkupLine ("Please enter the time in Format [green]'hh:mm'[/].");
-         AnsiConsole.MarkupLine ("You can write [green]'now'[/] to choose actual time or press [green]'Enter'[/] to make no changes in time.");
-         newValue = Gui.GetUserInput ($"New time: ");
-
-         if (string.IsNullOrEmpty (newValue))
-            newValue = prevTime;
-         else if (string.Compare (newValue.Trim (), "now", StringComparison.OrdinalIgnoreCase) == 0)
-            newValue = DateTime.Now.ToString ("HH:mm");
-         else
-         {
-            if (!CheckTime (newValue.Trim ()))
-            {
-               Gui.Exception ("The time was entered in wrong format");
-               continue;
-            }
-         }
-
-         newValue = newValue.Trim ();
-         if (newValue != prevTime)
-            isChanged = true;
-
-         // Transfer entered data in actual record
-         if (isChanged)
-         {
-            if (_selectedColumn == 1)
-               session.SetStartDateTime (newDate, newValue);
-            else
-               session.SetEndDateTime (newDate, newValue);
-         }
-
-         break;
+            session.SetEndDateTime (newDate, newTime);
       }
 
       return isChanged;
@@ -503,139 +550,17 @@ internal class SessionsTable
 
    bool CorrectDuration ()
    {
-      bool isChanged = false;
+      if (_sessions == null)
+         return true;
+
       var session = _sessions [_selectedLine];
 
       string prevDuration = session.GetDuration ();
-
-      // Ask a new data until all inputs will be correct  
-      for (; ; )
-      {
-         Console.Clear ();
-         Gui.ShowMainTitel ();
-
-         AnsiConsole.WriteLine ();
-         AnsiConsole.MarkupLine ($"Actual value of property [green]'Duration'[/]: {prevDuration}");
-         AnsiConsole.MarkupLine ($"Please enter new duration in format [green]'hh:mm'[/] or press [green]'Enter'[/] to make no changes.");
-         AnsiConsole.MarkupLine ($"Alternative format: [Aqua]<hours>h <minutes>m[/], i.e. '2h 35m' for 2 hours and 35 minutes.");
-
-         string newValue = Gui.GetUserInput ($"New duration: ");
-         if (string.IsNullOrEmpty (newValue))
-            break;
-
-         if (!CheckDuration (newValue.Trim ()))
-         {
-            Gui.Exception ("The duration was entered in wrong format");
-            continue;
-         }
-
-         if (newValue != prevDuration)
-         {
-            session.SetDuration (newValue);
-            isChanged = true;
-         }
-
-         break;
-      }
-
-      return isChanged;
-   }
-
-   bool CheckDate (string input)
-   {
-      var dates = input.Split ('.');
-      if (dates == null || dates.Length != 3)
+      string newDuration = Gui.AskDuration (prevDuration);
+      if (string.IsNullOrEmpty (newDuration) || newDuration == prevDuration)
          return false;
 
-      if (dates [0].Length < 2 || !int.TryParse (dates [0], out int day) || day < 0 || day > 31)
-         return false;
-
-      if (dates [1].Length < 2 || !int.TryParse (dates [1], out int month) || month < 0 || month > 12)
-         return false;
-
-      if (dates [2].Length < 4 || !int.TryParse (dates [2], out int year) || year < 2000)
-         return false;
-
-      DateTime dt = new (year, month, day);
-      if (dt > DateTime.Now)
-         return false;
-
-      if (month == 2) // February
-      {
-         bool isLeapYear = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
-         if (isLeapYear)
-         {
-            if (day > 29)
-               return false;
-         }
-         else
-         {
-            if (day > 28)
-               return false;
-         }
-      }
-      else if (day > 30 && (month == 4 || month == 6 || month == 9 || month == 11))
-         return false;
-
-      return true;
-   }
-
-   bool CheckTime (string input)
-   {
-      var times = input.Split (':');
-      if (times == null || times.Length != 2)
-         return false;
-
-      if (times [0].Length < 2 || !int.TryParse (times [0], out int val) || val < 0)
-         return false;
-
-      if (times [1].Length < 2 || !int.TryParse (times [1], out val) || val < 0 || val >= 60)
-         return false;
-
-      return true;
-   }
-
-   bool CheckDuration (string input)
-   {
-      if (input.IndexOf (':') >= 0)
-         return CheckTime (input);
-
-      bool noHours = false;
-      int index = input.IndexOf ('h');
-      if (index < 0)
-         index = input.IndexOf ('H');
-
-      int val;
-      string str;
-      if (index < 0)
-      {
-         str = input;
-         noHours = true;
-      }
-      else
-      {
-         str = input.Substring (0, index);
-         if (!int.TryParse (str, out val) || val < 0)
-            return false;
-
-         str = input.Substring (index + 1).Trim ();
-      }
-
-      index = str.IndexOf ('m');
-      if (index < 0)
-         index = str.IndexOf ('M');
-
-      if (index < 0 && noHours)
-         return false;
-
-      string strMin = str.Substring (0, index);
-      if (!int.TryParse (strMin, out val) || val < 0)
-         return false;
-
-      str = str.Substring (index + 1).Trim ();
-      if (!string.IsNullOrEmpty (str))
-         return false;
-
+      session.SetDuration (newDuration);
       return true;
    }
 }

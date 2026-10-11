@@ -13,6 +13,7 @@ internal class ProjectWorker
 
    int _projID;
 
+   #region Positions on screen to update dynamicaly changed values of statistic 
    int _posXLastPause;
    int _posYLastPause;
 
@@ -27,9 +28,10 @@ internal class ProjectWorker
 
    int _posXSpinner;
    int _posYSpinner;
+   #endregion
 
    Status _currentStatus = Status.Paused;
-   Timer _timer;
+   Timer ?_timer;
 
    string _spinner = "\\|/-";
    int _spinnerIndex;
@@ -37,13 +39,12 @@ internal class ProjectWorker
    DateTime _dtStartWork = DateTime.MinValue;
    DateTime _dtLastPause = DateTime.MinValue;
 
-   int _totalSeconds;
+   int _totalSeconds; // Total amount of working time since start working on project
 
    public void Start (string projName)
    {
       _projID = DbManager.GetProjectID (projName);
 
-      AnsiConsole.Clear ();
       Gui.ShowMainTitel ();
       ShowStatistic (projName);
       UpdateActualStatus ();
@@ -96,8 +97,6 @@ internal class ProjectWorker
 
    void ProcessInput ()
    {
-      Console.CursorVisible = false;
-
       for (; ; )
       {
          var keyCode = Console.ReadKey (true).Key;

@@ -1,6 +1,5 @@
 ﻿using Dapper;
 using Microsoft.Data.Sqlite;
-using System.Xml.Linq;
 
 namespace CodingTracker.Database;
 
@@ -18,20 +17,45 @@ public class DbManager
 
    public static SqliteConnection EstablishDefaultConnection ()
    { 
-      return EstablishConnection (SettingsHolder.Config.ConnectionString);
+      return EstablishConnection (SettingsHolder.Config?.ConnectionString ?? string.Empty);
+   }
+
+   /// <summary>
+   /// Establish connection with database and execute arbitrary command on it
+   /// </summary>
+   /// <param name="cmd"></param>
+   static void Execute (Action <SqliteConnection ?> cmd)
+   {
+      if (cmd == null)
+         return;
+
+      SqliteConnection ?connection = null;
+      try
+      {
+         connection = EstablishDefaultConnection ();
+         cmd (connection);
+      }
+      catch (Exception)
+      {
+         throw;
+      }
+      finally
+      {
+         connection?.Close ();
+      }
    }
 
    public static bool CreateEmptyDatabase ()
    {
-      bool newDatabase = true;
-      SqliteConnection connection = null;
-      try
+      bool newDatabase = false;
+      Execute ((connection) =>
       {
-         connection = EstablishDefaultConnection ();
+         if (connection == null)
+            return;
 
          connection.Execute (@"CREATE TABLE IF NOT EXISTS projects
                                (Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                               Name TEXT UNIQUE NOT NULL)" );
+                               Name TEXT UNIQUE NOT NULL)");
 
          connection.Execute (@"CREATE TABLE IF NOT EXISTS logs 
                                (Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,14 +69,7 @@ public class DbManager
 
          var count = connection.ExecuteScalar ("SELECT COUNT (*) cnt FROM projects");
          newDatabase = count == null || count.ToString () == "0";
-      }
-      catch (Exception)
-      {
-      }
-      finally
-      {
-         connection?.Close ();
-      }
+      });
 
       return newDatabase;
    }
@@ -75,14 +92,15 @@ public class DbManager
          "Unspecified"
       };
 
-      const int maxProjects = 5;
-      const int maxLogsPerProject = 20;
+      const int maxProjects          = 5;
+      const int maxLogsPerProject    = 20;
       const int maxDurationInMinutes = 300; // 5 hours
-      const int workPeriodInDays = 30;
+      const int workPeriodInDays     = 30;
 
       DateTime dtStart = DateTime.Now.AddDays (-workPeriodInDays);
       Random rand = new ();
 
+      // To search a project with latest date (most recent project from latest work)
       DateTime lastTime = DateTime.MinValue;
       string lastProject = string.Empty;
 
@@ -98,6 +116,7 @@ public class DbManager
                break;
          }
 
+         // Generate start date and time of work on the project
          DateTime dt = dtStart.AddDays (rand.Next (0, workPeriodInDays));
          dt = dt.AddMinutes (rand.Next (0, 1440));
 
@@ -107,6 +126,7 @@ public class DbManager
          if (sessions == null || sessions.Count <= 0)
             continue;
 
+         // If its a project with latest time, then save it as a most recent project
          DateTime lastTimeCurSessions = sessions [sessions.Count - 1].GetEndTime ();
          if (lastTimeCurSessions > lastTime)
          { 
@@ -122,114 +142,84 @@ public class DbManager
 
       if (!string.IsNullOrEmpty (lastProject))
       { 
-         SettingsHolder.Config.LastProject = lastProject;
+         SettingsHolder.Config?.LastProject = lastProject;
          SettingsHolder.Save ();
       }
 
-      SqliteConnection connection = null;
-      try
+      Execute ((connection) =>
       {
-         connection = EstablishDefaultConnection ();
+         if (connection == null)
+            return;
 
-         // Write all projects to db
-         List<object> dataToWrite = new ();
-         foreach (var (name, _) in allSessions)
-         {
-            CodingProject proj = new ()
-            {
-               Name = name
-            };
-            dataToWrite.Add (proj.GetAnonymousObject ());
-         }
+         // Write names of all projects to db
+         var namesAllProjects = allSessions.Keys.ToList ().Select (x => new { Name = x }).ToList ();
+         connection.Execute ("INSERT INTO projects (Name) VALUES (@Name)", namesAllProjects);
 
-         connection.Execute ("INSERT INTO projects (Name) VALUES (@Name)", dataToWrite);
          List<CodingProject> projects = connection.Query<CodingProject> ("SELECT * FROM projects").ToList ();
 
-         // Write sessions od all projects to db
-         dataToWrite.Clear ();
+         // Write sessions of all projects to db
+         List<object> sessionsToWrite = new ();
 
          foreach (var proj in projects)
          {
+            if (proj == null || proj.Name == null)
+               continue;
+
             var sessions = allSessions [proj.Name];
-            foreach (var session in sessions)
-               dataToWrite.Add (session.GetAnonymousObject (proj.Id));
+            sessionsToWrite.AddRange (sessions.Select (x => x.GetAnonymousObject (proj.Id)));
          }
 
-         connection.Execute ("INSERT INTO logs (ProjectId, StartDate, EndDate, StartTime, EndTime) " +
-                             "VALUES (@ProjectId, @StartDate, @EndDate, @StartTime, @EndTime)", 
-                             dataToWrite);
-      }
-      catch (Exception)
-      {
-         throw;
-      }
-      finally 
-      {
-         connection?.Close ();
-      }
+         connection.Execute (@"INSERT INTO logs (ProjectId, StartDate, EndDate, StartTime, EndTime) 
+                               VALUES (@ProjectId, @StartDate, @EndDate, @StartTime, @EndTime)",
+                             sessionsToWrite);
+      });
    }
 
-   public static List<CodingProject> GetAllProjects ()
+   public static List<CodingProject> ?GetAllProjects ()
    {
-      List<CodingProject> projects = null;
-      SqliteConnection connection = null;
+      List<CodingProject> ?projects = null;
 
-      try
+      Execute ((connection) =>
       {
-         connection = EstablishDefaultConnection ();
-         projects =  connection.Query<CodingProject> ("SELECT * FROM projects ORDER BY Name").ToList ();
-      }
-      catch (Exception ex)
-      {
-         throw;
-      }
-      finally 
-      {
-         connection?.Close ();
-      }
+         projects = connection?.Query<CodingProject> ("SELECT * FROM projects ORDER BY Name")
+                               .ToList ();
+      });
 
       return projects;
    }
 
-   public static List<CodingSession> GetAllSessionsOfProject (int projID)
+   public static HashSet<string> GetNamesOfAllProjects ()
    {
-      List<CodingSession> sessions = null;
-      SqliteConnection connection = null;
+      HashSet<string> names = new ();
+      var projects = GetAllProjects ();
+      if (projects == null)
+         return names;
 
-      try
+      names = projects.Select (x => x.Name != null ? x.Name.Trim ().ToLower () : string.Empty)
+                      .ToHashSet ();
+      return names;
+   }
+
+   public static List<CodingSession> ?GetAllSessionsOfProject (int projID)
+   {
+      List<CodingSession> ?sessions = null;
+      
+      Execute ((connection) => 
       {
-         connection = EstablishDefaultConnection ();
-         sessions = connection.Query<CodingSession> ($"SELECT * FROM logs WHERE ProjectId = {projID} ORDER BY StartDate, StartTime").ToList ();
-      }
-      catch (Exception)
-      {
-         throw;
-      }
-      finally
-      {
-         connection?.Close ();
-      }
+         string sql = $"SELECT * FROM logs WHERE ProjectId = @ProjectId ORDER BY StartDate, StartTime";
+         sessions = connection?.Query<CodingSession> (sql, new { ProjectId = projID})
+                               .ToList ();
+      });
 
       return sessions;
    }
 
    public static void DeleteSession (int sessionID)
    {
-      SqliteConnection connection = null;
-
-      try
+      Execute ((connection) =>
       {
-         connection = EstablishDefaultConnection ();
-         connection.Execute ($"DELETE FROM logs WHERE Id = {sessionID}");
-      }
-      catch (Exception)
-      {
-         throw;
-      }
-      finally
-      {
-         connection?.Close ();
-      }
+         connection?.Execute ($"DELETE FROM logs WHERE Id = @Id", new { Id = sessionID });
+      });
    }
 
    public static void UpdateSessions (List<CodingSession> sessions)
@@ -237,107 +227,103 @@ public class DbManager
       if (sessions == null || sessions.Count <= 0)
          return;
 
-      SqliteConnection connection = null;
-      try
+      Execute ((connection) =>
       {
-         connection = EstablishDefaultConnection ();
+         if (connection == null)
+            return;
+
          foreach (var session in sessions)
-            connection.Execute ($"UPDATE logs SET StartDate = {session.StartDate}, EndDate = {session.EndDate}, " +
-                                $"StartTime = {session.StartTime}, EndTime = {session.EndTime} WHERE Id = {session.Id}");
-      }
-      catch (Exception)
-      {
-         throw;
-      }
-      finally
-      {
-         connection?.Close ();
-      }
+         {
+            var param = new
+            {
+               session.StartDate,
+               session.EndDate,
+               session.StartTime,
+               session.EndTime,
+               session.Id
+            };
+
+            connection.Execute (@"UPDATE logs SET 
+                                  StartDate = @StartDate, 
+                                  EndDate   = @EndDate, 
+                                  StartTime = @StartTime, 
+                                  EndTime   = @EndTime
+                                  WHERE Id = @Id",
+                                  param);
+         }
+      });
    }
 
    public static void AddNewSession (CodingSession session, int projID)
    {
-      SqliteConnection connection = null;
+      Execute ((connection) =>
+      {
+         connection?.Execute (@"INSERT INTO logs (ProjectId, StartDate, EndDate, StartTime, EndTime)
+                                VALUES (@ProjectId, @StartDate, @EndDate, @StartTime, @EndTime)",
+                                session.GetAnonymousObject (projID));
 
-      try
-      {
-         connection = EstablishDefaultConnection ();
-         connection.Execute ("INSERT INTO logs (ProjectId, StartDate, EndDate, StartTime, EndTime) " +
-                             "VALUES (@ProjectId, @StartDate, @EndDate, @StartTime, @EndTime)",
-                             session.GetAnonymousObject (projID));
-      }
-      catch (Exception)
-      {
-         throw;
-      }
-      finally
-      {
-         connection?.Close ();
-      }
+         var data = connection?.Query ("SELECT MAX (Id) AS LastLog FROM logs")
+                               .ToList ()
+                               .FirstOrDefault ();
+
+         if (data != null)
+            session.Id = Convert.ToInt32 (data.LastLog);
+      });
    }
 
    public static void DeleteProject (int projID)
    {
-      SqliteConnection connection = null;
-
-      try
+      Execute ((connection) =>
       {
-         connection = EstablishDefaultConnection ();
-         connection.Execute ($"DELETE FROM projects WHERE Id = {projID}");
-      }
-      catch (Exception)
-      {
-         throw;
-      }
-      finally
-      {
-         connection?.Close ();
-      }
+         connection?.Execute ("DELETE FROM projects WHERE Id = @Id", new { Id = projID });
+      });
    }
 
    public static void AddNewProject (string name)
    {
-      SqliteConnection connection = null;
-
-      try
+      Execute ((connection) =>
       {
-         connection = EstablishDefaultConnection ();
-         connection.Execute ($"INSERT INTO projects (Name) VALUES ('{name}')");
-      }
-      catch (Exception)
-      {
-         throw;
-      }
-      finally
-      {
-         connection?.Close ();
-      }
+         connection?.Execute ($"INSERT INTO projects (Name) VALUES (@Name)", new { Name = name });
+      });
    }
 
    public static int GetProjectID (string projName)
    {
-      SqliteConnection connection = null;
       int projID = 0;
 
-      try
+      Execute ((connection) =>
       {
-         connection = EstablishDefaultConnection ();
-         var data = connection.Query ("SELECT Id FROM projects WHERE Name = @Name", new { Name = projName})
-                              .ToList ()
-                              .FirstOrDefault ();
+         var data = connection?.Query ("SELECT Id FROM projects WHERE Name = @Name", new { Name = projName })
+                               .ToList ()
+                               .FirstOrDefault ();
 
          if (data != null)
             projID = Convert.ToInt32 (data.Id);
-      }
-      catch (Exception)
-      {
-         throw;
-      }
-      finally
-      {
-         connection?.Close ();
-      }
+      });
 
       return projID;
+   }
+
+   /// <summary>
+   /// Returns name of project with most recent EndDate + EndTime
+   /// </summary>
+   /// <returns></returns>
+   public static string GetNameOfMostRecentProject ()
+   {
+      string projName = string.Empty;
+
+      Execute ((connection) =>
+      {
+         if (connection == null)
+            return;
+
+         string sql = @"SELECT Name FROM projects WHERE ID =
+                       (SELECT ProjectId FROM logs ORDER BY CONCAT (EndDate, CAST (PRINTF('%04d', EndTime) AS TEXT (4))) DESC LIMIT 1)";
+         var data = connection.Query (sql).ToList ().FirstOrDefault ();
+         if (data != null)
+            projName = data.Name;
+      });
+
+      return projName;
    }
 }

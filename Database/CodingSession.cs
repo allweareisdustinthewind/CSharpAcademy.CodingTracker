@@ -1,18 +1,31 @@
-using Newtonsoft.Json.Linq;
-using Spectre.Console;
 using System.Globalization;
-using System.Windows.Markup;
 
 namespace CodingTracker;
 
 public class CodingSession
 {
    public int Id { get; set; }
-   public string StartDate { get; set; }
-   public string EndDate { get; set; }
-   public int StartTime { get; set; }
-   public int EndTime { get; set; }
+   public string ?StartDate { get; set; } // Format: yyyyMMdd
+   public string ?EndDate { get; set; } // Format: yyyyMMdd
+   public int StartTime { get; set; } // Minutes in a day, value from 0 to 1439 (23:59)
+   public int EndTime { get; set; } // Minutes in a day, value from 0 to 1439 (23:59)
 
+   public static CodingSession Create (string startDate, string startTime, string endDate, string endTime)
+   {
+      CodingSession session = new ();
+      session.SetStartDateTime (startDate, startTime);
+      session.SetEndDateTime (endDate, endTime);
+
+      return session;
+   }
+
+   /// <summary>
+   /// Will be used by filling database with some random sessions for actual project
+   /// </summary>
+   /// <param name="dtStart"></param>
+   /// <param name="numLogs"></param>
+   /// <param name="maxDurationInMinutes"></param>
+   /// <returns></returns>
    public static List <CodingSession> CreateDummySessions (DateTime dtStart, int numLogs, int maxDurationInMinutes)
    {
       List<CodingSession> sessions = new ();
@@ -24,6 +37,8 @@ public class CodingSession
       for (int i = 0; i < numLogs; ++i)
       {
          DateTime dtEnd = dtStart.AddMinutes (rand.Next (1, maxDurationInMinutes));
+         
+         // Skip dates from future to keep generated data realistic
          if (dtStart >= now || dtEnd >= now)
             break;
 
@@ -43,6 +58,11 @@ public class CodingSession
       return sessions;
    }
 
+   /// <summary>
+   /// Produced object with all data of session to use in SQL-engine
+   /// </summary>
+   /// <param name="projectID"></param>
+   /// <returns></returns>
    public object GetAnonymousObject (int projectID)
    {
       return new { ProjectId = projectID, StartDate, EndDate, StartTime, EndTime};
@@ -71,16 +91,21 @@ public class CodingSession
    public string GetDuration ()
    {
       int duration = (int)(GetDateTime (EndDate, EndTime) - GetDateTime (StartDate, StartTime)).TotalMinutes;
-      return $"{duration / 60:D2}:{duration % 60:D2}";
+      return $"{duration / 60:D2}:{duration % 60:D2}"; // Format "HH:mm"
    }
 
-   DateTime GetDateTime (string date, int time)
+   DateTime GetDateTime (string ?date, int time)
    {
       if (!DateTime.TryParseExact (date, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
          throw new Exception ($"Timestamp with date = '{date}' and time = '{time}' is incorrect");
 
       dt = dt.AddMinutes (time);
       return dt;
+   }
+
+   public string GetInfo ()
+   {
+      return $"{GetStartTimeAsString ()} - {GetEndTimeAsString ()}";
    }
 
    public void SetStartDateTime (string date, string time)
@@ -113,9 +138,9 @@ public class CodingSession
       if (dates == null || dates.Length != 3)
          return string.Empty;
 
-      int day = Convert.ToInt32 (dates [0]);
+      int day   = Convert.ToInt32 (dates [0]);
       int month = Convert.ToInt32 (dates [1]);
-      int year = Convert.ToInt32 (dates [2]);
+      int year  = Convert.ToInt32 (dates [2]);
       return $"{year:D4}{month:D2}{day:D2}";
    }
 
@@ -125,7 +150,7 @@ public class CodingSession
       if (times == null || times.Length != 2)
          return 0;
 
-      int hours = Convert.ToInt32 (times [0]);
+      int hours   = Convert.ToInt32 (times [0]);
       int minutes = Convert.ToInt32 (times [1]);
 
       return hours * 60 + minutes;
@@ -135,16 +160,19 @@ public class CodingSession
    {
       int duration = GetDurationFromString (value.Trim ());
       DateTime dtEnd = GetStartTime ().AddMinutes (duration);
-      EndDate = dtEnd.ToString ("yyyyMMdd");
-      EndTime = dtEnd.Hour * 60 + dtEnd.Minute;
+      SetEndDateTime (dtEnd);
    }
 
    int GetDurationFromString (string value)
    {
+      // Try to parse duration in standard format "HH:mm"
       if (value.IndexOf (':') >= 0)
          return GetTimeFromString (value);
 
       int hours = 0, minutes = 0;
+
+      // Duration is in alternative format "<hours>h <minutes>m".
+      // Get part "<hours>" from input string
       int index = value.IndexOf ('h');
       if (index < 0)
          index = value.IndexOf ('H');
@@ -159,6 +187,7 @@ public class CodingSession
       else
          str = value;
 
+      // Get part "<minutes>" from input string
       index = str.IndexOf ('m');
       if (index < 0)
          index = str.IndexOf ('M');

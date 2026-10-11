@@ -1,4 +1,3 @@
-
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -7,13 +6,13 @@ namespace CodingTracker;
 public class Settings
 {
    public string ConnectionString = "Data Source=log.db";
-   public string LastProject;
+   public string ?LastProject; // Name of most recent project from last coding session
 }
 
 public static class SettingsHolder
 {
    public readonly static string SettingsFile = "appsettings.json";
-   public static Settings Config { get; set; }
+   public static Settings ?Config { get; set; }
 
    public static bool Load ()
    {
@@ -27,7 +26,7 @@ public static class SettingsHolder
       return Config != null;
    }
 
-   public static Settings GetFromText (string json)
+   public static Settings ?GetFromText (string json)
    {
       JObject obj = JObject.Parse (json);
       if (obj == null)
@@ -40,7 +39,7 @@ public static class SettingsHolder
             throw new Exception ($"The field '{field}' is not present in config-file '{SettingsFile}'");
       }
 
-      return (Settings) obj.ToObject (typeof (Settings));
+      return obj.ToObject<Settings> ();
    }
 
 
@@ -55,8 +54,10 @@ public static class SettingsHolder
       if (Config == null)
          return;
 
-      JsonSerializer serializer = new ();
-      serializer.Formatting = Formatting.Indented;
+      JsonSerializer serializer = new ()
+      {
+         Formatting = Formatting.Indented
+      };
 
       using (StreamWriter writer = new (SettingsFile))
       using (JsonWriter jsWriter = new JsonTextWriter (writer))

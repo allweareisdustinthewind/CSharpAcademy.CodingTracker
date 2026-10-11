@@ -1,5 +1,4 @@
-﻿
-using CodingTracker.Database;
+﻿using CodingTracker.Database;
 using CodingTracker.UI;
 using Spectre.Console;
 
@@ -11,6 +10,8 @@ internal class App
    {
       try
       {
+         Console.CursorVisible = false;
+
          if (!SettingsHolder.Load ())
             SettingsHolder.CreateDefaultConfig ();
 
@@ -36,7 +37,6 @@ internal class App
       }
       catch (Exception ex)
       {
-         Console.CursorVisible = false;
          AnsiConsole.MarkupLine ($"[white on red] {ex.Message} [/]\n");
          AnsiConsole.MarkupLine ($"[yellow]Press any key to exit...[/]");
          Console.ReadKey (true);

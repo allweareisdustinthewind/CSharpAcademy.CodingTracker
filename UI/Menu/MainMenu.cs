@@ -1,7 +1,5 @@
-﻿
-using CodingTracker.Database;
+﻿using CodingTracker.Database;
 using Spectre.Console;
-using System.Xml.Linq;
 
 namespace CodingTracker.UI.Menu;
 
@@ -12,7 +10,7 @@ internal class MainMenu : ConsoleMenu
 {
    public MainMenu ()
    {
-      if (!string.IsNullOrEmpty (SettingsHolder.Config.LastProject))
+      if (!string.IsNullOrEmpty (SettingsHolder.Config?.LastProject))
       {
          AddItem ($"Resume last project ('{SettingsHolder.Config.LastProject}')", ResumeLastProject);
          AddItem ("------------------------", (item) => { return false; });
@@ -27,25 +25,19 @@ internal class MainMenu : ConsoleMenu
 
    bool CreateNewProject (string item)
    {
-      var projNames = DbManager.GetAllProjects ()
-                               .Select (x => x.Name.Trim ().ToLower ())
-                               .ToHashSet ();
-
+      var projNames = DbManager.GetNamesOfAllProjects ();
+      
       string name = string.Empty;
       for (; ; )
       {
-         AnsiConsole.Clear ();
          Gui.ShowMainTitel ();
 
-         AnsiConsole.WriteLine ("Please enter a name of your new project.");
+         AnsiConsole.MarkupLine ("Please enter a name of your new project (no name + [blue]Enter[/] to cancel of creation).");
          name = Gui.GetUserInput ("[blue]Name:[/] ");
 
          string testProjName = name.Trim ().ToLower ();
          if (string.IsNullOrEmpty (testProjName))
-         {
-            Gui.Exception ("The name can't be empty");
-            continue;
-         }
+            return false;
 
          if (projNames.Contains (testProjName))
          {
@@ -57,7 +49,7 @@ internal class MainMenu : ConsoleMenu
       }
 
       DbManager.AddNewProject (name);
-      SettingsHolder.Config.LastProject = name;
+      SettingsHolder.Config?.LastProject = name;
       SettingsHolder.Save ();
 
       ResumeLastProject ();
@@ -73,7 +65,7 @@ internal class MainMenu : ConsoleMenu
       if (menu.CurrentProject == null)
          return false;
 
-      SettingsHolder.Config.LastProject = menu.CurrentProject.Name;
+      SettingsHolder.Config?.LastProject = menu.CurrentProject.Name;
       SettingsHolder.Save ();
 
       ResumeLastProject ();
@@ -83,7 +75,7 @@ internal class MainMenu : ConsoleMenu
 
    bool ResumeLastProject (string item = "")
    {
-      new ProjectWorker ().Start (SettingsHolder.Config.LastProject);
+      new ProjectWorker ().Start (SettingsHolder.Config?.LastProject ?? string.Empty);
       return false;
    }
 
@@ -98,13 +90,20 @@ internal class MainMenu : ConsoleMenu
       var menu = new ProjectsMenu ("Select project", onlyGetProjName: true);
       menu.Show ();
 
-      if (menu.CurrentProject != null)
-      {
-         Gui.Info ($"The project [green]'{menu.CurrentProject.Name}'[/] with all its sessions will be deleted.", makeDelay: false);
-         AnsiConsole.WriteLine ();
-         if (Gui.Ask ("Are you sure ?"))
-            DbManager.DeleteProject (menu.CurrentProject.Id);
-      }
+      if (menu.CurrentProject == null)
+         return false;
+
+      Gui.Info ($"The project [green]'{menu.CurrentProject.Name}'[/] with all its sessions will be deleted.");
+      AnsiConsole.WriteLine ();
+      if (!Gui.Ask ("Are you sure ?"))
+         return false;
+
+      DbManager.DeleteProject (menu.CurrentProject.Id);
+
+      // If the deleted project was most recent project to work on, then get a project with latestes date
+      // and set it as a new most recent project
+      if (SettingsHolder.Config?.LastProject == menu.CurrentProject.Name)
+         SettingsHolder.Config?.LastProject = DbManager.GetNameOfMostRecentProject ();
 
       return false;
    }
