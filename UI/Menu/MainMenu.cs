@@ -102,8 +102,7 @@ internal class MainMenu : ConsoleMenu
 
       // If the deleted project was most recent project to work on, then get a project with latestes date
       // and set it as a new most recent project
-      if (SettingsHolder.Config?.LastProject == menu.CurrentProject.Name)
-         SettingsHolder.Config?.LastProject = DbManager.GetNameOfMostRecentProject ();
+      SettingsHolder.DeleteProject (menu.CurrentProject.Name);
 
       return false;
    }

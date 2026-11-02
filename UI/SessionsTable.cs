@@ -20,6 +20,8 @@ internal class SessionsTable
    int _columnToSort = -1;
    bool _sortInAscOrder = false;
 
+   Dictionary<int, bool> _configuredFilters = new ();
+
    public SessionsTable (CodingProject ?proj)
    {
       if (proj == null)
@@ -34,26 +36,55 @@ internal class SessionsTable
          return;
       }
 
+      var allFilters = SettingsHolder.Config?.Filter;
+      if (allFilters != null)
+      {
+         if (allFilters.TryGetValue (_proj.Name, out var filters))
+            _configuredFilters = filters.ToDictionary (x => x.Key, x => true);
+      }
+
       FillTable ();
    }
 
    void CreateEmptyTable ()
    {
+      if (_proj == null || _proj.Name == null)
+         return;
+
       string [] columns = ["ID", "Start", "End", "Duration (hh:mm)"];
+      string [] flags   = [string.Empty, string.Empty, string.Empty, string.Empty];
       if (_columnToSort >= 0)
+         flags [_columnToSort] = _sortInAscOrder ? "asc" : "desc";
+
+      var allFilters = SettingsHolder.Config?.Filter;
+      if (allFilters != null && allFilters.TryGetValue (_proj.Name, out var filters) && filters != null)
       {
-         string str = _sortInAscOrder ? " (asc)" : " (desc)";
-         columns [_columnToSort] += str;
+         foreach (var (index, text) in filters)
+         {
+            if (string.IsNullOrEmpty (text.Trim ()))
+               continue;
+
+            if (!_configuredFilters.TryGetValue (index, out bool active) || !active)
+               continue;
+
+            if (string.IsNullOrEmpty (flags [index]))
+               flags [index] = "F";
+            else
+               flags [index] += ", F";
+         }
       }
 
-      _table = Gui.CreateTable (columns);
+      string [] names = columns.Zip (flags, (col, flag) => string.IsNullOrEmpty (flag) ? col : $"{col} ({flag})")
+                               .ToArray ();
+
+      _table = Gui.CreateTable (names);
    }
 
    void FillTable ()
    {
       CreateEmptyTable ();
 
-      if (_sessions == null || _sessions.Count <= 0)
+      if (_sessions == null || _sessions.Count <= 0 || _table == null)
          return;
 
       for (int i = 0; i < _sessions.Count; ++i)
@@ -175,6 +206,14 @@ internal class SessionsTable
                SortData ();
                break;
 
+            case ConsoleKey.C:
+               ConfigureFilter ();
+               break;
+
+            case ConsoleKey.F:
+               ToggleFilter ();
+               break;
+
             case ConsoleKey.S:
                SaveChanges (updateGUI: true);
                break;
@@ -265,6 +304,44 @@ internal class SessionsTable
          else
             _sessions.Sort ((x, y) => y.GetDuration ().CompareTo (x.GetDuration ()));
       }
+
+      FillTable ();
+      UpdateCurrentCell ();
+   }
+
+   void ConfigureFilter ()
+   {
+      if (_proj == null || _proj.Name == null)
+         return;
+
+      string config = (_selectedColumn == 1 || _selectedColumn == 2) ? 
+                                            Gui.AskFilterDateTime () : 
+                                            Gui.AskFilterDuration ();
+      if (string.IsNullOrEmpty (config))
+         return;
+
+      SettingsHolder.SaveFilter (_proj.Name, _selectedColumn, config);
+
+      FillTable ();
+      UpdateCurrentCell ();
+   }
+
+   void ToggleFilter ()
+   {
+      if (_proj == null || _proj.Name == null)
+         return;
+
+      var allFilters = SettingsHolder.Config?.Filter;
+      if (allFilters == null || !allFilters.TryGetValue (_proj.Name, out var filters) || filters == null)
+         return;
+
+      if (!filters.ContainsKey (_selectedColumn))
+         return;
+
+      if (!_configuredFilters.ContainsKey (_selectedColumn))
+         _configuredFilters [_selectedColumn] = false;
+      else
+         _configuredFilters [_selectedColumn] = !_configuredFilters [_selectedColumn];
 
       FillTable ();
       UpdateCurrentCell ();
@@ -461,7 +538,10 @@ internal class SessionsTable
             Gui.Info ($"The project [green]'{_proj.Name}'[/] has no more sessions.");
             AnsiConsole.WriteLine ();
             if (Gui.Ask ("Would you like to delete it as well?"))
+            {
                DbManager.DeleteProject (_proj.Id);
+               SettingsHolder.DeleteProject (_proj.Name);
+            }
          }
 
          return false;

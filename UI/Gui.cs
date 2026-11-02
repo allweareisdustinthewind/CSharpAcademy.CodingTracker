@@ -249,4 +249,56 @@ internal class Gui
 
       return duration;
    }
+
+   public static string AskFilterDateTime ()
+   {
+      string filter = string.Empty;
+
+      for (; ; )
+      {
+         ShowMainTitel ();
+
+         AnsiConsole.WriteLine  ();
+         AnsiConsole.WriteLine  ("  Set configuration of filter to restrict values of date / time.");
+         AnsiConsole.MarkupLine ("  Press [blue]Enter[/] to make no changes and go back to previous view.");
+         AnsiConsole.MarkupLine ("  Allowed parameters: [Aqua]date[/] and [Aqua]time[/]");
+         AnsiConsole.MarkupLine ("  Allowed operators: [blue]>, >=, <, <=, =, <>, (, ), and, or, not.[/]\n");
+         AnsiConsole.MarkupLine ("  [blue]Examples:[/]\n");
+         AnsiConsole.MarkupLine ($"     - ([Aqua]date[/] <= {DateTime.Now.ToString ("dd.MM.yyyy")} and [Aqua]date[/] > 01.02.2020) and ([Aqua]time[/] = 00:01 or [Aqua]time[/] < 02:12)");
+         AnsiConsole.MarkupLine ($"     - [Aqua]time[/] <> 03:23 and not [Aqua]date[/] > 13.06.2025\n");
+
+         filter = GetUserInput ("  [green]Filter:[/] ").Trim ();
+         if (string.IsNullOrEmpty (filter))
+            return filter;
+
+         break;
+      }
+      return filter;
+   }
+
+   public static string AskFilterDuration ()
+   {
+      string filter = string.Empty;
+
+      for (; ; )
+      {
+         ShowMainTitel ();
+
+         AnsiConsole.WriteLine ();
+         AnsiConsole.WriteLine ("  Set configuration of filter to restrict values of duration.");
+         AnsiConsole.MarkupLine ("  Press [blue]Enter[/] to make no changes and go back to previous view.");
+         AnsiConsole.MarkupLine ("  Allowed parameter: [Aqua]time[/]");
+         AnsiConsole.MarkupLine ("  Allowed operators: [blue]>, >=, <, <=, =, <>, (, ), and, or, not.[/]\n");
+         AnsiConsole.MarkupLine ("  [blue]Examples:[/]\n");
+         AnsiConsole.MarkupLine ($"     - ([Aqua]time[/] <= 5h and [Aqua]time[/] > 03:00) and ([Aqua]time[/] = 02:06 or [Aqua]time[/] < 01:37)");
+         AnsiConsole.MarkupLine ($"     - [Aqua]time[/] <> 03:23 and not [Aqua]time[/] > 04:23\n");
+
+         filter = GetUserInput ("  [green]Filter:[/] ").Trim ();
+         if (string.IsNullOrEmpty (filter))
+            return filter;
+
+         break;
+      }
+      return filter;
+   }
 }
