@@ -223,15 +223,15 @@ internal class Gui
             AnsiConsole.Markup ($"   Actual value of [Aqua]'Duration'[/] is {defaultValue}\n");
 
          AnsiConsole.MarkupLine ("   Please enter the duration in Format [Aqua]'hh:mm'[/] or [Aqua]'hh:mm:ss'[/].");
+         AnsiConsole.MarkupLine ($"   Alternative format: [Aqua]<hours>h <minutes>m <seconds>s[/], i.e. '2h 35m 12s' for 2 hours 35 minutes 12 seconds.");
 
-         string str = "   You can write [blue]'now'[/] to choose actual time";
+         string str = string.Empty;
          if (!string.IsNullOrEmpty (defaultValue))
-            str += " or press [blue]'Enter' [/] to make no changes in actual duration.";
+            str += "   You can press [blue]'Enter' [/] to make no changes in actual duration.\n";
          else
-            str += " or press [blue]'Enter'[/] to cancel.";
+            str += "   You can press [blue]'Enter'[/] to cancel.\n";
 
          AnsiConsole.MarkupLine (str);
-         AnsiConsole.MarkupLine ($"   Alternative format: [Aqua]<hours>h <minutes>m <seconds>s[/], i.e. '2h 35m 12s' for 2 hours 35 minutes 12 seconds.\n");
 
          duration = GetUserInput ($"   [green]Duration:[/] ").Trim ();
 

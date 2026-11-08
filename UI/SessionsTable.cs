@@ -51,7 +51,7 @@ internal class SessionsTable
       if (_proj == null || _proj.Name == null)
          return;
 
-      string [] columns = ["ID", "Start", "End", "Duration (hh:mm:ss)"];
+      string [] columns = ["ID", "Start", "End", "Duration"];
       string [] flags   = [string.Empty, string.Empty, string.Empty, string.Empty];
       if (_columnToSort >= 0)
          flags [_columnToSort] = _sortInAscOrder ? "asc" : "desc";
@@ -637,10 +637,10 @@ internal class SessionsTable
 
       string prevDuration = session.GetDuration ();
       string newDuration = Gui.AskDuration (prevDuration);
-      if (string.IsNullOrEmpty (newDuration) || newDuration == prevDuration)
+      if (string.IsNullOrEmpty (newDuration))
          return false;
 
       session.SetDuration (newDuration);
-      return true;
+      return session.GetDuration () != prevDuration;
    }
 }

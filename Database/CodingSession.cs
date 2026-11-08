@@ -99,7 +99,7 @@ public class CodingSession
       int minutes = duration / 60;
       duration -= (minutes * 60);
 
-      return $"{hours:D2}:{minutes:D2}:{duration:D2}"; // Format "HH:mm:ss"
+      return $"{hours:D2}h {minutes:D2}m {duration:D2}s";
    }
 
    DateTime GetDateTime (string ?date, int time)
@@ -143,7 +143,7 @@ public class CodingSession
    public void SetDuration (string value)
    {
       int duration = Converter.GetDurationFromString (value.Trim ());
-      DateTime dtEnd = GetStartTime ().AddMinutes (duration);
+      DateTime dtEnd = GetStartTime ().AddSeconds (duration);
       SetEndDateTime (dtEnd);
    }
 }

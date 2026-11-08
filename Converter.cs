@@ -56,43 +56,30 @@ internal static class Converter
       if (value.IndexOf (':') >= 0)
          return GetTimeFromString (value);
 
-      int hours = 0, minutes = 0, seconds = 0;
-
       // Duration is in alternative format "<hours>h <minutes>m <seconds>s".
-      // Get part "<hours>" from input string
-      int index = value.IndexOf ('h');
-      if (index < 0)
-         index = value.IndexOf ('H');
+      var times = value.ToLower ().Split (' ');
+      int duration = 0;
+      foreach (var tm in times)
+         duration += GetValueInSeconds (tm);
 
-      string str;
-      if (index >= 0)
+      int GetValueInSeconds (string data)
       {
-         str = value.Substring (0, index);
-         hours = Convert.ToInt32 (str);
-         str = value.Substring (index + 1).Trim ();
-      }
-      else
-         str = value;
+         data = data.Trim ();
+         char sym = data [data.Length - 1];
+         data = data.Substring (0, data.Length - 1);
 
-      // Get part "<minutes>" from input string
-      index = str.IndexOf ('m');
-      if (index < 0)
-         index = str.IndexOf ('M');
+         if (!int.TryParse (data, out int val))
+            return 0;
 
-      if (index >= 0)
-      {
-         str = str.Substring (0, index);
-         minutes = Convert.ToInt32 (str);
-         str = value.Substring (index + 1).Trim ();
+         return sym switch
+         {
+            'h' => val * 3600,
+            'm' => val * 60,
+            _   => val
+         };
+
       }
 
-      index = str.IndexOf ('s');
-      if (index >= 0)
-      {
-         str = str.Substring (0, index);
-         seconds = Convert.ToInt32 (str);
-      }
-
-      return hours * 3600 + minutes * 60 + seconds;
+      return duration;
    }
 }
