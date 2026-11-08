@@ -1,4 +1,4 @@
-﻿namespace CodingTracker.Filter.Lexical;
+﻿namespace CodingTracker.Filter;
 
 internal enum TokenType
 {

@@ -1,7 +1,6 @@
 ﻿using CodingTracker.Database;
 using CodingTracker.UI;
 using Spectre.Console;
-using CodingTracker.Filter;
 
 namespace CodingTracker;
 
@@ -11,13 +10,6 @@ internal class App
    {
       try
       {
-         //--===
-         {
-            FilterExpr f = new ();
-            f.Evaluate ("(date >= 'now' and time <= '23:14')", "20261101", "02:21");
-         }
-         //--===
-
          Console.CursorVisible = false;
 
          if (!SettingsHolder.Load ())

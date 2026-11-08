@@ -1,47 +1,35 @@
-﻿namespace CodingTracker.Filter.Lexical;
-
-//- expression → equality
-//- equality → comparison (("=" | "<>") comparison)*
-//- comparison → unary (("<" | "<=" | ">" | ">=") unary)*
-//- unary → "not" | unary | primary
-//- primary → STRING | "now" | "(" expression ")"
+﻿namespace CodingTracker.Filter;
 
 internal class Parser
 {
    List<Token> _tokens;
    int _curIndex;
-   string _date;
-   string _time;
-   string _duration;
+   bool _expectDateTime; // If true, then are the input parameters 'date' and 'time' available.
+                         // Otherwise one can use only the parameter 'val' (duration)
 
-   public Parser (List<Token> tokens, string date, string time)
+   public Parser (List<Token> tokens, bool expectDateTime)
    {
       _tokens = tokens;
-
-      if (string.IsNullOrEmpty (time))
-         _duration = date;
-      else
-      {
-         _date = date;
-         _time = time;
-      }
+      _expectDateTime = expectDateTime;
    }
 
    public Expression parse ()
    {
-      try
-      {
-         return expression ();
-      }
-      catch (ParseException ex)
-      {
-         return null;
-      }
+      return expression ();
    }
 
    Expression expression ()
    {
-      return equality ();
+      Expression expr = equality ();
+
+      while (match (TokenType.And, TokenType.Or))
+      {
+         Token op = previous ();
+         Expression exprRight = equality ();
+         expr = new BinaryExpr (expr, op, exprRight);
+      }
+
+      return expr;
    }
 
    Expression equality ()
@@ -51,8 +39,14 @@ internal class Parser
       while (match (TokenType.Equal, TokenType.NotEqual))
       {
          Token op = previous ();
+         Token op_prev = before_previous ();
+
          Expression exprRight = comparison ();
-         expr = new BinaryExp (expr, op, exprRight);
+         BinaryExpr exprBin = new (expr, op, exprRight);
+         if (op_prev.type == TokenType.Date || op_prev.type == TokenType.Time || op_prev.type == TokenType.Val)
+            exprBin.PrepareDataToCompare (op_prev.type);
+
+         expr = exprBin;
       }
 
       return expr;
@@ -65,8 +59,14 @@ internal class Parser
       while (match (TokenType.Less, TokenType.LessOrEqual, TokenType.Greater, TokenType.GreaterOrEqual))
       {
          Token op = previous ();
+         Token op_prev = before_previous ();
+
          Expression exprRight = unary ();
-         expr = new BinaryExp (expr, op, exprRight);
+         BinaryExpr exprBin = new (expr, op, exprRight);
+         if (op_prev.type == TokenType.Date || op_prev.type == TokenType.Time || op_prev.type == TokenType.Val)
+            exprBin.PrepareDataToCompare (op_prev.type);
+
+         expr = exprBin;
       }
 
       return expr;
@@ -78,7 +78,7 @@ internal class Parser
       {
          Token op = previous ();
          Expression expr = unary ();
-         return new UnaryExp (op, expr); 
+         return new UnaryExpr (op, expr); 
       }
 
       return primary ();
@@ -87,33 +87,43 @@ internal class Parser
    Expression primary ()
    {
       if (match (TokenType.Date))
-         return new LiteralExp (_date);
+      {
+         if (!_expectDateTime)
+            throw ParseException.report (peek (), "Parameter 'date' is not allowed");
+
+         return new LiteralExpr ("date");
+      }
 
       if (match (TokenType.Time))
-         return new LiteralExp (_time);
+      {
+         if (!_expectDateTime)
+            throw ParseException.report (peek (), "Parameter 'time' is not allowed");
+
+         return new LiteralExpr ("time");
+      }
 
       if (match (TokenType.Val))
       {
-         if (string.IsNullOrEmpty (_time))
+         if (_expectDateTime)
             throw ParseException.report (peek (), "Parameter 'val' is not allowed");
 
-         return new LiteralExp (_duration);
+         return new LiteralExpr ("val");
       }
 
       if (match (TokenType.And))
-         return new LiteralExp ("and");
+         return new LiteralExpr ("and");
 
       if (match (TokenType.Or))
-         return new LiteralExp ("or");
+         return new LiteralExpr ("or");
 
       if (match (TokenType.Text))
-         return new LiteralExp (previous ().literal);
+         return new LiteralExpr (previous ().literal);
 
       if (match (TokenType.LeftBrace))
       {
          Expression expr = expression ();
          consume (TokenType.RightBrace, "Expect ')' after expression.");
-         return new GroupingExp (expr);
+         return new GroupingExpr (expr);
       }
 
       throw ParseException.report (peek (), "Expect expression");
@@ -162,6 +172,11 @@ internal class Parser
    Token previous ()
    {
       return _tokens [_curIndex - 1];
+   }
+
+   Token before_previous ()
+   {
+      return _tokens [_curIndex - 2];
    }
 
    Token consume (TokenType type, string message)

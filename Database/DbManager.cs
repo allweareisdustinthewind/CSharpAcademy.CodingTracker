@@ -92,10 +92,11 @@ public class DbManager
          "Unspecified"
       };
 
-      const int maxProjects          = 5;
-      const int maxLogsPerProject    = 20;
-      const int maxDurationInMinutes = 300; // 5 hours
-      const int workPeriodInDays     = 30;
+      const int maxProjects           = 5;
+      const int maxLogsPerProject     = 20;
+      const int maxDurationInSeconds  = 5 * 60 * 60; // 5 hours in seconds
+      const int workPeriodInDays      = 30;
+      const int secondsInOneDay       = 24 * 60 * 60;
 
       DateTime dtStart = DateTime.Now.AddDays (-workPeriodInDays);
       Random rand = new ();
@@ -118,11 +119,11 @@ public class DbManager
 
          // Generate start date and time of work on the project
          DateTime dt = dtStart.AddDays (rand.Next (0, workPeriodInDays));
-         dt = dt.AddMinutes (rand.Next (0, 1440));
+         dt = dt.AddSeconds (rand.Next (0, secondsInOneDay));
 
          int numLogs = rand.Next (1, maxLogsPerProject);
 
-         var sessions = CodingSession.CreateDummySessions (dt, numLogs, maxDurationInMinutes);
+         var sessions = CodingSession.CreateDummySessions (dt, numLogs, maxDurationInSeconds);
          if (sessions == null || sessions.Count <= 0)
             continue;
 
@@ -318,7 +319,7 @@ public class DbManager
             return;
 
          string sql = @"SELECT Name FROM projects WHERE ID =
-                       (SELECT ProjectId FROM logs ORDER BY CONCAT (EndDate, CAST (PRINTF('%04d', EndTime) AS TEXT (4))) DESC LIMIT 1)";
+                       (SELECT ProjectId FROM logs ORDER BY CONCAT (EndDate, CAST (PRINTF('%05d', EndTime) AS TEXT (5))) DESC LIMIT 1)";
          var data = connection.Query (sql).ToList ().FirstOrDefault ();
          if (data != null)
             projName = data.Name;

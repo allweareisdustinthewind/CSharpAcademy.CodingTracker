@@ -51,7 +51,7 @@ internal class SessionsTable
       if (_proj == null || _proj.Name == null)
          return;
 
-      string [] columns = ["ID", "Start", "End", "Duration (hh:mm)"];
+      string [] columns = ["ID", "Start", "End", "Duration (hh:mm:ss)"];
       string [] flags   = [string.Empty, string.Empty, string.Empty, string.Empty];
       if (_columnToSort >= 0)
          flags [_columnToSort] = _sortInAscOrder ? "asc" : "desc";
@@ -603,7 +603,7 @@ internal class SessionsTable
       }
 
       string curDate = dt.ToString ("dd.MM.yyyy");
-      string curTime = dt.ToString ("HH:mm");
+      string curTime = dt.ToString ("HH:mm:ss");
 
       // Ask user about new date / time for changed session and not allow him to enter incorrect values 
       string newDate = Gui.AskDate (nameDate, curDate);

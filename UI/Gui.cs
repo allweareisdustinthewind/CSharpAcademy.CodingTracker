@@ -144,7 +144,7 @@ internal class Gui
    }
 
    /// <summary>
-   /// Ask to enter time in format "HH:mm". 
+   /// Ask to enter time in format "HH:mm:ss". 
    /// Possible alternative answers: 
    /// - now : actual time
    /// - no data + Enter: no changes in time or cancel the changing of time
@@ -170,7 +170,7 @@ internal class Gui
                AnsiConsole.MarkupLine ($"   Parameter [Aqua]'{parameterName}'[/]");
          }
 
-         AnsiConsole.MarkupLine ("   Please enter the time in Format [Aqua]'hh:mm'[/].");
+         AnsiConsole.MarkupLine ("   Please enter the time in Format [Aqua]'hh:mm'[/] or [Aqua]'hh:mm:ss'[/].");
 
          string str = "   You can write [blue]'now'[/] to choose actual time";
          if (!string.IsNullOrEmpty (defaultValue))
@@ -187,7 +187,7 @@ internal class Gui
             return defaultValue;
             
          if (string.Compare (time, "now", StringComparison.OrdinalIgnoreCase) == 0)
-            return DateTime.Now.ToString ("HH:mm");
+            return DateTime.Now.ToString ("HH:mm:ss");
          
          if (!Checker.IsTimeValid (time))
          {
@@ -202,9 +202,9 @@ internal class Gui
    }
 
    /// <summary>
-   /// Ask to enter duration in format "HH:mm".
-   /// Possible alternative format: "{hours}h {minutes}m", i.e. 3h 40m for 3 hours and 40 minutes.
-   /// Also possible only hours or only minutes i.e. 4h, 20m, 12 H, 240    M and so on.
+   /// Ask to enter duration in format "HH:mm:ss".
+   /// Possible alternative format: "{hours}h {minutes}m {seconds}s", i.e. 3h 40m 22s for 3 hours 40 minutes 22 seconds.
+   /// Also possible only hours, only minutes oor only seconds i.e. 4h, 20m, 12H, 240M, 32s and so on.
    /// To cancel the changing of duration just enter no data and press Enter
    /// </summary>
    /// <param name="defaultValue"></param>
@@ -222,7 +222,7 @@ internal class Gui
          if (!string.IsNullOrEmpty (defaultValue))
             AnsiConsole.Markup ($"   Actual value of [Aqua]'Duration'[/] is {defaultValue}\n");
 
-         AnsiConsole.MarkupLine ("   Please enter the duration in Format [Aqua]'hh:mm'[/].");
+         AnsiConsole.MarkupLine ("   Please enter the duration in Format [Aqua]'hh:mm'[/] or [Aqua]'hh:mm:ss'[/].");
 
          string str = "   You can write [blue]'now'[/] to choose actual time";
          if (!string.IsNullOrEmpty (defaultValue))
@@ -231,7 +231,7 @@ internal class Gui
             str += " or press [blue]'Enter'[/] to cancel.";
 
          AnsiConsole.MarkupLine (str);
-         AnsiConsole.MarkupLine ($"   Alternative format: [Aqua]<hours>h <minutes>m[/], i.e. '2h 35m' for 2 hours and 35 minutes.\n");
+         AnsiConsole.MarkupLine ($"   Alternative format: [Aqua]<hours>h <minutes>m <seconds>s[/], i.e. '2h 35m 12s' for 2 hours 35 minutes 12 seconds.\n");
 
          duration = GetUserInput ($"   [green]Duration:[/] ").Trim ();
 
@@ -264,8 +264,8 @@ internal class Gui
          AnsiConsole.MarkupLine ("  Allowed parameters: [Aqua]date[/] and [Aqua]time[/]");
          AnsiConsole.MarkupLine ("  Allowed operators: [blue]>, >=, <, <=, =, <>, (, ), and, or, not.[/]\n");
          AnsiConsole.MarkupLine ("  [blue]Examples:[/]\n");
-         AnsiConsole.MarkupLine ($"     - ([Aqua]date[/] <= {DateTime.Now.ToString ("dd.MM.yyyy")} and [Aqua]date[/] > 01.02.2020) and ([Aqua]time[/] = 00:01 or [Aqua]time[/] < 02:12)");
-         AnsiConsole.MarkupLine ($"     - [Aqua]time[/] <> 03:23 and not [Aqua]date[/] > 13.06.2025\n");
+         AnsiConsole.MarkupLine ($"     - ([Aqua]date[/] <= '{DateTime.Now.ToString ("dd.MM.yyyy")}' and [Aqua]date[/] > '01.02.2020') and ([Aqua]time[/] = '00:01' or [Aqua]time[/] < '02:12:25')");
+         AnsiConsole.MarkupLine ($"     - [Aqua]time[/] <> '03:23' and not [Aqua]date[/] > '13.06.2025'\n");
 
          filter = GetUserInput ("  [green]Filter:[/] ").Trim ();
          if (string.IsNullOrEmpty (filter))
@@ -287,11 +287,11 @@ internal class Gui
          AnsiConsole.WriteLine ();
          AnsiConsole.WriteLine ("  Set configuration of filter to restrict values of duration.");
          AnsiConsole.MarkupLine ("  Press [blue]Enter[/] to make no changes and go back to previous view.");
-         AnsiConsole.MarkupLine ("  Allowed parameter: [Aqua]time[/]");
+         AnsiConsole.MarkupLine ("  Allowed parameter: [Aqua]val[/]");
          AnsiConsole.MarkupLine ("  Allowed operators: [blue]>, >=, <, <=, =, <>, (, ), and, or, not.[/]\n");
          AnsiConsole.MarkupLine ("  [blue]Examples:[/]\n");
-         AnsiConsole.MarkupLine ($"     - ([Aqua]time[/] <= 5h and [Aqua]time[/] > 03:00) and ([Aqua]time[/] = 02:06 or [Aqua]time[/] < 01:37)");
-         AnsiConsole.MarkupLine ($"     - [Aqua]time[/] <> 03:23 and not [Aqua]time[/] > 04:23\n");
+         AnsiConsole.MarkupLine ($"     - ([Aqua]val[/] <= '5h' and [Aqua]val[/] > '03:00') and ([Aqua]val[/] = '02:06:43' or [Aqua]val[/] < '01:37:16')");
+         AnsiConsole.MarkupLine ($"     - [Aqua]val[/] <> '3h 23m 14s' and not [Aqua]val[/] > '04:23'\n");
 
          filter = GetUserInput ("  [green]Filter:[/] ").Trim ();
          if (string.IsNullOrEmpty (filter))

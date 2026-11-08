@@ -24,19 +24,21 @@ public class CodingSession
    /// </summary>
    /// <param name="dtStart"></param>
    /// <param name="numLogs"></param>
-   /// <param name="maxDurationInMinutes"></param>
+   /// <param name="maxDurationInSeconds"></param>
    /// <returns></returns>
-   public static List <CodingSession> CreateDummySessions (DateTime dtStart, int numLogs, int maxDurationInMinutes)
+   public static List <CodingSession> CreateDummySessions (DateTime dtStart, int numLogs, int maxDurationInSeconds)
    {
       List<CodingSession> sessions = new ();
 
       var now = DateTime.Now;
-      const int maxPauseBetweenSessions = 720; // 12 hours
+
+      const int minPauseBetweenSessions = 10 * 60;      // 10 minutes in seconds
+      const int maxPauseBetweenSessions = 12 * 60 * 60; // 12 hours in seconds
 
       Random rand = new ();
       for (int i = 0; i < numLogs; ++i)
       {
-         DateTime dtEnd = dtStart.AddMinutes (rand.Next (1, maxDurationInMinutes));
+         DateTime dtEnd = dtStart.AddSeconds (rand.Next (1, maxDurationInSeconds));
          
          // Skip dates from future to keep generated data realistic
          if (dtStart >= now || dtEnd >= now)
@@ -46,13 +48,13 @@ public class CodingSession
          {
             StartDate = dtStart.ToString ("yyyyMMdd"),
             EndDate   = dtEnd.ToString ("yyyyMMdd"),
-            StartTime = (int) dtStart.TimeOfDay.TotalMinutes,
-            EndTime   = (int) dtEnd.TimeOfDay.TotalMinutes,
+            StartTime = (int) dtStart.TimeOfDay.TotalSeconds,
+            EndTime   = (int) dtEnd.TimeOfDay.TotalSeconds,
          };
          sessions.Add (session);
 
-         int pause = rand.Next (10, maxPauseBetweenSessions);
-         dtStart = dtEnd.AddMinutes (pause);
+         int pause = rand.Next (minPauseBetweenSessions, maxPauseBetweenSessions);
+         dtStart = dtEnd.AddSeconds (pause);
       }
 
       return sessions;
@@ -70,12 +72,12 @@ public class CodingSession
 
    public string GetStartTimeAsString ()
    {
-      return GetStartTime ().ToString ("dd.MM.yyyy HH:mm");
+      return GetStartTime ().ToString ("dd.MM.yyyy HH:mm:ss");
    }
 
    public string GetEndTimeAsString ()
    {
-      return GetEndTime ().ToString ("dd.MM.yyyy HH:mm");
+      return GetEndTime ().ToString ("dd.MM.yyyy HH:mm:ss");
    }
 
    public DateTime GetStartTime ()
@@ -90,8 +92,14 @@ public class CodingSession
 
    public string GetDuration ()
    {
-      int duration = (int)(GetDateTime (EndDate, EndTime) - GetDateTime (StartDate, StartTime)).TotalMinutes;
-      return $"{duration / 60:D2}:{duration % 60:D2}"; // Format "HH:mm"
+      int duration = (int)(GetDateTime (EndDate, EndTime) - GetDateTime (StartDate, StartTime)).TotalSeconds;
+      int hours = duration / 3600;
+      duration -= (hours * 3600);
+
+      int minutes = duration / 60;
+      duration -= (minutes * 60);
+
+      return $"{hours:D2}:{minutes:D2}:{duration:D2}"; // Format "HH:mm:ss"
    }
 
    DateTime GetDateTime (string ?date, int time)
@@ -99,7 +107,7 @@ public class CodingSession
       if (!DateTime.TryParseExact (date, "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
          throw new Exception ($"Timestamp with date = '{date}' and time = '{time}' is incorrect");
 
-      dt = dt.AddMinutes (time);
+      dt = dt.AddSeconds (time);
       return dt;
    }
 
@@ -110,94 +118,32 @@ public class CodingSession
 
    public void SetStartDateTime (string date, string time)
    {
-      StartDate = GetDateFromString (date);
-      StartTime = GetTimeFromString (time);
+      StartDate = Converter.GetDateFromString (date);
+      StartTime = Converter.GetTimeFromString (time);
    }
 
    public void SetStartDateTime (DateTime dt)
    {
       StartDate = dt.ToString ("yyyyMMdd");
-      StartTime = dt.Hour * 60 + dt.Minute;
+      StartTime = dt.Hour * 3600 + dt.Minute * 60 + dt.Second;
    }
 
    public void SetEndDateTime (string date, string time)
    {
-      EndDate = GetDateFromString (date);
-      EndTime = GetTimeFromString (time);
+      EndDate = Converter.GetDateFromString (date);
+      EndTime = Converter.GetTimeFromString (time);
    }
 
    public void SetEndDateTime (DateTime dt)
    {
       EndDate = dt.ToString ("yyyyMMdd");
-      EndTime = dt.Hour * 60 + dt.Minute;
-   }
-
-   string GetDateFromString (string date)
-   {
-      var dates = date.Split ('.');
-      if (dates == null || dates.Length != 3)
-         return string.Empty;
-
-      int day   = Convert.ToInt32 (dates [0]);
-      int month = Convert.ToInt32 (dates [1]);
-      int year  = Convert.ToInt32 (dates [2]);
-      return $"{year:D4}{month:D2}{day:D2}";
-   }
-
-   int GetTimeFromString (string time)
-   {
-      var times = time.Split (':');
-      if (times == null || times.Length != 2)
-         return 0;
-
-      int hours   = Convert.ToInt32 (times [0]);
-      int minutes = Convert.ToInt32 (times [1]);
-
-      return hours * 60 + minutes;
+      EndTime = dt.Hour * 3600 + dt.Minute * 60 + dt.Second;
    }
 
    public void SetDuration (string value)
    {
-      int duration = GetDurationFromString (value.Trim ());
+      int duration = Converter.GetDurationFromString (value.Trim ());
       DateTime dtEnd = GetStartTime ().AddMinutes (duration);
       SetEndDateTime (dtEnd);
-   }
-
-   int GetDurationFromString (string value)
-   {
-      // Try to parse duration in standard format "HH:mm"
-      if (value.IndexOf (':') >= 0)
-         return GetTimeFromString (value);
-
-      int hours = 0, minutes = 0;
-
-      // Duration is in alternative format "<hours>h <minutes>m".
-      // Get part "<hours>" from input string
-      int index = value.IndexOf ('h');
-      if (index < 0)
-         index = value.IndexOf ('H');
-
-      string str;
-      if (index >= 0)
-      {
-         str = value.Substring (0, index);
-         hours = Convert.ToInt32 (str);
-         str = value.Substring (index + 1).Trim ();
-      }
-      else
-         str = value;
-
-      // Get part "<minutes>" from input string
-      index = str.IndexOf ('m');
-      if (index < 0)
-         index = str.IndexOf ('M');
-
-      if (index >= 0)
-      {
-         str = str.Substring (0, index);
-         minutes = Convert.ToInt32 (str);
-      }
-
-      return hours * 60 + minutes;
    }
 }
