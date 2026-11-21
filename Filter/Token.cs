@@ -1,6 +1,6 @@
 ﻿namespace CodingTracker.Filter;
 
-internal enum TokenType
+public enum TokenType
 {
    LeftBrace,
    RightBrace,
@@ -20,7 +20,7 @@ internal enum TokenType
    End
 };
 
-internal class Token
+public class Token
 {
    public TokenType type;
    public string lexeme;

@@ -1,11 +1,11 @@
 ﻿namespace CodingTracker.Filter;
 
-internal abstract class Expression
+public abstract class Expression
 {
    abstract public string accept (IVisitor visitor);
 }
 
-internal interface IVisitor
+public interface IVisitor
 {
    string visitBinaryExp (BinaryExpr expr);
    string visitGroupingExp (GroupingExpr expr);
@@ -13,7 +13,7 @@ internal interface IVisitor
    string visitUnaryExp (UnaryExpr expr);
 }
 
-internal class BinaryExpr : Expression
+public class BinaryExpr : Expression
 {
    public Expression ExprLeft;
    public Token Operation;
@@ -44,7 +44,7 @@ internal class BinaryExpr : Expression
    string PrepareDate (string date)
    {
       if (date != "now" && !Checker.IsDateValid (date))
-         throw new ParseException (Operation.position, $"at {Operation.lexeme}", "Date is in wrong format");
+         throw new ParseException (Operation.position, $"at {Operation.lexeme}", "Date is in wrong format, expects dd:mm:yyyy");
 
       return Converter.GetDateFromString (date);
    }
@@ -52,7 +52,7 @@ internal class BinaryExpr : Expression
    string PrepareTime (string time)
    {
       if (time != "now" && !Checker.IsTimeValid (time))
-         throw new ParseException (Operation.position, $"at {Operation.lexeme}", "Time is in wrong format");
+         throw new ParseException (Operation.position, $"at {Operation.lexeme}", "Time is in wrong format, expects hh:mm:ss");
 
       return Converter.GetTimeFromString (time).ToString ();
    }
@@ -63,7 +63,7 @@ internal class BinaryExpr : Expression
          throw new ParseException (Operation.position, $"at {Operation.lexeme}", "Duration in format 'now' is not accepted");
 
       if (!Checker.IsDurationValid (val))
-         throw new ParseException (Operation.position, $"at {Operation.lexeme}", "Duration is in wrong format");
+         throw new ParseException (Operation.position, $"at {Operation.lexeme}", "Duration is in wrong format, expects hh:mm:ss or 'N1'h 'N2'm 'N3's");
 
       return Converter.GetDurationFromString (val).ToString ();
    }
@@ -74,7 +74,7 @@ internal class BinaryExpr : Expression
    }
 }
 
-internal class GroupingExpr : Expression
+public class GroupingExpr : Expression
 {
    public Expression Expr;
 
@@ -89,7 +89,7 @@ internal class GroupingExpr : Expression
    }
 }
 
-internal class LiteralExpr : Expression
+public class LiteralExpr : Expression
 {
    public string Value;
 
@@ -104,7 +104,7 @@ internal class LiteralExpr : Expression
    }
 }
 
-internal class UnaryExpr : Expression
+public class UnaryExpr : Expression
 {
    public Token Operation;
    public Expression Expr;

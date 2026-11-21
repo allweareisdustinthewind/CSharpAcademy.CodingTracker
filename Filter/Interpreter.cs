@@ -1,8 +1,6 @@
-﻿using CodingTracker.UI;
+﻿namespace CodingTracker.Filter;
 
-namespace CodingTracker.Filter;
-
-internal class Interpreter : IVisitor
+public class Interpreter : IVisitor
 {
    string _date;
    string _time;
@@ -67,25 +65,20 @@ internal class Interpreter : IVisitor
          Scanner scanner = new (filterText.ToLower ());
          var tokens = scanner.DoScan ();
          if (tokens?.Count <= 0)
-         {
-            Gui.Exception ($"The expression '{filterText}' is not valid");
-            return null;
-         }
+            throw new ParseException (0, "in syntax", $"The expression '{filterText}' is not valid");
 
          return new Parser (tokens, expectDateTime).parse ();
       }
       catch (ParseException ex)
       {
-         Gui.Exception (ex.Message);
+         throw;
       }
-
-      return null;
    }
 
    public bool Run (Expression ?expr, string date, string time)
    {
       if (expr == null)
-         return false;
+         throw new ParseException (0, "in syntax", "Error in text of expression");
 
       _date = date;
       _time = time.PadLeft (5, '0');
@@ -95,8 +88,9 @@ internal class Interpreter : IVisitor
 
    public bool Run (Expression? expr, string duration)
    {
+
       if (expr == null)
-         return false;
+         throw new ParseException (0, "in syntax", "Error in text of expression");
 
       _duration = duration.PadLeft (10, '0');
 
@@ -105,16 +99,6 @@ internal class Interpreter : IVisitor
 
    bool RunIntern (Expression? expr)
    {
-      try
-      {
-         string res = Evaluate (expr);
-         return res == "true";
-      }
-      catch (ParseException ex)
-      {
-         Gui.Exception (ex.Message);
-      }
-
-      return false;
+      return Evaluate (expr) == "true";
    }
 }

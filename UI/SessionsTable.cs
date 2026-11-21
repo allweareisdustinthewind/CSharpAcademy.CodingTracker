@@ -1,4 +1,5 @@
 ﻿using CodingTracker.Database;
+using CodingTracker.Filter;
 using Spectre.Console;
 
 namespace CodingTracker.UI;
@@ -314,13 +315,48 @@ internal class SessionsTable
       if (_proj == null || _proj.Name == null)
          return;
 
-      string config = (_selectedColumn == 1 || _selectedColumn == 2) ? 
-                                            Gui.AskFilterDateTime () : 
-                                            Gui.AskFilterDuration ();
-      if (string.IsNullOrEmpty (config))
-         return;
+      bool expectDateTime = _selectedColumn == 1 || _selectedColumn == 2;
+      string filterText = string.Empty;
 
-      SettingsHolder.SaveFilter (_proj.Name, _selectedColumn, config);
+      for (; ; )
+      {
+         filterText = expectDateTime ? Gui.AskFilterDateTime () : Gui.AskFilterDuration ();
+         if (string.IsNullOrEmpty (filterText))
+            return;
+
+         Interpreter interpreter = new ();
+         Expression? expr = null;
+
+         try
+         {
+            expr = interpreter.Compile (filterText, expectDateTime);
+         }
+         catch (ParseException ex)
+         {
+            Gui.Exception (ex.Message);
+            continue;
+         }
+
+         if (expr == null)
+            continue;
+
+         try
+         {
+            if (expectDateTime)
+               interpreter.Run (expr, "20000101", "00000");
+            else
+               interpreter.Run (expr, "00000");
+         }
+         catch (ParseException ex)
+         {
+            Gui.Exception (ex.Message);
+            continue;
+         }
+
+         break;
+      }
+
+      SettingsHolder.SaveFilter (_proj.Name, _selectedColumn, filterText);
 
       FillTable ();
       UpdateCurrentCell ();

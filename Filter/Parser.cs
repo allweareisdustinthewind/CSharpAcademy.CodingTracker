@@ -15,7 +15,11 @@ internal class Parser
 
    public Expression parse ()
    {
-      return expression ();
+      Expression expr = expression ();
+      if (!isAtEnd ())
+         throw ParseException.report (peek (), "Expression contains unrecognised character");
+
+      return expr;
    }
 
    Expression expression ()
