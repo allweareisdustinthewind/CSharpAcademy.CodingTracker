@@ -65,7 +65,7 @@ public class BinaryExpr : Expression
       if (!Checker.IsDurationValid (val))
          throw new ParseException (Operation.position, $"at {Operation.lexeme}", "Duration is in wrong format, expects hh:mm:ss or 'N1'h 'N2'm 'N3's");
 
-      return Converter.GetDurationFromString (val).ToString ();
+      return Converter.GetDurationFromString (val).ToString ().PadLeft (10, '0');
    }
 
    public override string accept (IVisitor visitor)

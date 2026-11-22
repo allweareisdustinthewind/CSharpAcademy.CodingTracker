@@ -16,6 +16,8 @@ internal class Scanner
       { "val", TokenType.Val }
    };
 
+   HashSet<char> _notAlpha = new () { ' ', '\t', '\n', '\r', '<', '>', '=', '\'', '\0'};
+
    public string LastError;
 
    public Scanner (string source)
@@ -160,8 +162,7 @@ internal class Scanner
 
    bool IsAlpha (char ch)
    {
-      // Input character is always in lower case
-      return ch >= 'a' && ch <= 'z';
+      return !_notAlpha.Contains (ch);
    }
 
    void ReportError (string message)

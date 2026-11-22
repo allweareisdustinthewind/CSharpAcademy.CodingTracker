@@ -1,4 +1,5 @@
 ﻿using CodingTracker.Database;
+using CodingTracker.Filter;
 using CodingTracker.UI;
 using Spectre.Console;
 
@@ -11,6 +12,16 @@ internal class App
       try
       {
          Console.CursorVisible = false;
+
+         //--===
+         //{
+         //   Interpreter interpreter = new ();
+         //   var expr = interpreter.Compile ("val < '1h'", false);
+         //   bool res = interpreter.Run (expr, "7200");
+         //   int tt = 1;
+         //   tt = 2;
+         //}
+         //--===
 
          if (!SettingsHolder.Load ())
             SettingsHolder.CreateDefaultConfig ();

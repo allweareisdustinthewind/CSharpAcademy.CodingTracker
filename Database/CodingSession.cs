@@ -7,8 +7,8 @@ public class CodingSession
    public int Id { get; set; }
    public string ?StartDate { get; set; } // Format: yyyyMMdd
    public string ?EndDate { get; set; } // Format: yyyyMMdd
-   public int StartTime { get; set; } // Minutes in a day, value from 0 to 1439 (23:59)
-   public int EndTime { get; set; } // Minutes in a day, value from 0 to 1439 (23:59)
+   public int StartTime { get; set; } // Seconds in a day, value from 0 to 86399 (23:59:59)
+   public int EndTime { get; set; } // Minutes in a day, value from 0 to 86399 (23:59)
 
    public static CodingSession Create (string startDate, string startTime, string endDate, string endTime)
    {
@@ -92,7 +92,7 @@ public class CodingSession
 
    public string GetDuration ()
    {
-      int duration = (int)(GetDateTime (EndDate, EndTime) - GetDateTime (StartDate, StartTime)).TotalSeconds;
+      int duration = GetDurationInSeconds ();
       int hours = duration / 3600;
       duration -= (hours * 3600);
 
@@ -100,6 +100,11 @@ public class CodingSession
       duration -= (minutes * 60);
 
       return $"{hours:D2}h {minutes:D2}m {duration:D2}s";
+   }
+
+   public int GetDurationInSeconds ()
+   { 
+      return (int) (GetDateTime (EndDate, EndTime) - GetDateTime (StartDate, StartTime)).TotalSeconds;
    }
 
    DateTime GetDateTime (string ?date, int time)

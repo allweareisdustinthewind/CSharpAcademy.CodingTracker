@@ -67,6 +67,31 @@ public class Interpreter : IVisitor
          if (tokens?.Count <= 0)
             throw new ParseException (0, "in syntax", $"The expression '{filterText}' is not valid");
 
+         bool isDate = false;
+         bool isTime = false;
+         bool isVal = false;
+         foreach (var token in tokens)
+         {
+            if (token.type == TokenType.Date)
+               isDate = true;
+            else if (token.type == TokenType.Time)
+               isTime = true;
+            else if (token.type == TokenType.Val)
+               isVal = true;
+         }
+
+         if (isVal)
+         { 
+            if (isDate)
+               throw new ParseException (0, "in syntax", $"Using 'date' and 'val' in same expression is not allowed");
+            else
+               if (isTime)
+                  throw new ParseException (0, "in syntax", $"Using 'time' and 'val' in same expression is not allowed");
+         }
+         else if (!isDate && !isTime)
+            throw new ParseException (0, "in syntax", $"Expression is invalid: it contains no 'date', 'time' or 'val'.");
+
+
          return new Parser (tokens, expectDateTime).parse ();
       }
       catch (ParseException ex)

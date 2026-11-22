@@ -10,7 +10,13 @@ internal class FilterTests
       new TestCaseData ("date > '01.01.2026' && date < '02.02.2026'"),
       new TestCaseData ("val > '12'"),
       new TestCaseData ("date == '01.01.2026'"),
-      new TestCaseData ("(date < '01.01.2026'))")
+      new TestCaseData ("(date < '01.01.2026'))"),
+      new TestCaseData ("'01.01.2026' = '01.01.2026'"),
+      new TestCaseData ("date1 = '01.01.2026'"),
+      new TestCaseData ("date_ = '01.01.2026'"),
+      new TestCaseData ("&date = '01.01.2026'"),
+      new TestCaseData ("date '01.01.2026'"),
+      new TestCaseData ("val < 1h")
    ];
 
    static readonly object [] GoodSyntax =

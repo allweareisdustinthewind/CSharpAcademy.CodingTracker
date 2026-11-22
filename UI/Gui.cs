@@ -56,13 +56,23 @@ internal class Gui
       return AnsiConsole.Confirm (question);
    }
 
-   public static string GetUserInput (string hint)
+   public static string ?GetUserInput (string hint, string ?currentConfig = null)
    {
       using HideCursor hider = new (hide: false);
 
+      if (!string.IsNullOrEmpty (currentConfig))
+      {
+         AnsiConsole.Markup ("  [blue]Actual value:[/] ");
+         AnsiConsole.MarkupLine (currentConfig);
+      }
+
       AnsiConsole.Markup (hint);
+
       string ?value = Console.ReadLine ();
-      return value ?? "";
+      if (!string.IsNullOrEmpty (value))
+         return value.Trim ();
+
+      return currentConfig;
    }
 
    public static void Info (string text, bool makeDelay = false)
@@ -124,7 +134,7 @@ internal class Gui
          str += "\n";
          AnsiConsole.MarkupLine (str);
 
-         date = GetUserInput ($"   [green]Date:[/] ").Trim ();
+         date = GetUserInput ($"   [green]Date:[/] ");
          if (string.IsNullOrEmpty (date))
             return defaultValue;
 
@@ -181,7 +191,7 @@ internal class Gui
          str += "\n";
          AnsiConsole.MarkupLine (str);
 
-         time = GetUserInput ($"   [green]Time:[/] ").Trim ();
+         time = GetUserInput ($"   [green]Time:[/] ");
 
          if (string.IsNullOrEmpty (time))
             return defaultValue;
@@ -233,7 +243,7 @@ internal class Gui
 
          AnsiConsole.MarkupLine (str);
 
-         duration = GetUserInput ($"   [green]Duration:[/] ").Trim ();
+         duration = GetUserInput ($"   [green]Duration:[/] ");
 
          if (string.IsNullOrEmpty (duration))
             return defaultValue;
@@ -250,7 +260,7 @@ internal class Gui
       return duration;
    }
 
-   public static string AskFilterDateTime ()
+   public static string AskFilterDateTime (string ?currentConfig = null)
    {
       string filter = string.Empty;
 
@@ -267,7 +277,7 @@ internal class Gui
          AnsiConsole.MarkupLine ($"     - ([Aqua]date[/] <= '{DateTime.Now.ToString ("dd.MM.yyyy")}' and [Aqua]date[/] > '01.02.2020') and ([Aqua]time[/] = '00:01' or [Aqua]time[/] < '02:12:25')");
          AnsiConsole.MarkupLine ($"     - [Aqua]time[/] <> '03:23' and not [Aqua]date[/] > '13.06.2025'\n");
 
-         filter = GetUserInput ("  [green]Filter:[/] ").Trim ();
+         filter = GetUserInput ("  [green]Filter:[/] ", currentConfig);
          if (string.IsNullOrEmpty (filter))
             return filter;
 
@@ -276,7 +286,7 @@ internal class Gui
       return filter;
    }
 
-   public static string AskFilterDuration ()
+   public static string AskFilterDuration (string ?currentConfig)
    {
       string filter = string.Empty;
 
@@ -293,7 +303,7 @@ internal class Gui
          AnsiConsole.MarkupLine ($"     - ([Aqua]val[/] <= '5h' and [Aqua]val[/] > '03:00') and ([Aqua]val[/] = '02:06:43' or [Aqua]val[/] < '01:37:16')");
          AnsiConsole.MarkupLine ($"     - [Aqua]val[/] <> '3h 23m 14s' and not [Aqua]val[/] > '04:23'\n");
 
-         filter = GetUserInput ("  [green]Filter:[/] ").Trim ();
+         filter = GetUserInput ("  [green]Filter:[/] ", currentConfig);
          if (string.IsNullOrEmpty (filter))
             return filter;
 

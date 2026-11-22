@@ -13,15 +13,18 @@ internal class SessionsTable
    Table? _table;
 
    CodingProject ?_proj;
-   List<CodingSession>? _sessions;
+   List<CodingSession>? _sessions__;
+
+   // Sessions, which are visible on screen. Because of filters the visual can differs from data of list '_sessions'.
+   List<CodingSession> _sessionsToShow = new (); 
+
    HashSet<int> _changedSessions = new ();
    int _selectedLine;
    int _selectedColumn = 1;
 
    int _columnToSort = -1;
+   int _indexLastRow = 0; 
    bool _sortInAscOrder = false;
-
-   Dictionary<int, bool> _configuredFilters = new ();
 
    public SessionsTable (CodingProject ?proj)
    {
@@ -29,19 +32,12 @@ internal class SessionsTable
          return;
 
       _proj = proj;
-      _sessions = DbManager.GetAllSessionsOfProject (_proj.Id);
+      _sessions__ = DbManager.GetAllSessionsOfProject (_proj.Id);
 
-      if (_sessions == null || _sessions.Count <= 0)
+      if (_sessions__ == null || _sessions__.Count <= 0)
       {
          Gui.Info ("There are no sessions for this project.");
          return;
-      }
-
-      var allFilters = SettingsHolder.Config?.Filter;
-      if (allFilters != null)
-      {
-         if (allFilters.TryGetValue (_proj.Name, out var filters))
-            _configuredFilters = filters.ToDictionary (x => x.Key, x => true);
       }
 
       FillTable ();
@@ -60,18 +56,17 @@ internal class SessionsTable
       var allFilters = SettingsHolder.Config?.Filter;
       if (allFilters != null && allFilters.TryGetValue (_proj.Name, out var filters) && filters != null)
       {
-         foreach (var (index, text) in filters)
+         foreach (var (column, filter) in filters)
          {
-            if (string.IsNullOrEmpty (text.Trim ()))
+            if (filter.Expr == null)
                continue;
 
-            if (!_configuredFilters.TryGetValue (index, out bool active) || !active)
-               continue;
+            string filterSymbol = filter.Active ? "[DeepPink3_1]F[/]" : "F";
 
-            if (string.IsNullOrEmpty (flags [index]))
-               flags [index] = "F";
+            if (string.IsNullOrEmpty (flags [column]))
+               flags [column] = filterSymbol;
             else
-               flags [index] += ", F";
+               flags [column] += $", {filterSymbol}";
          }
       }
 
@@ -85,19 +80,60 @@ internal class SessionsTable
    {
       CreateEmptyTable ();
 
-      if (_sessions == null || _sessions.Count <= 0 || _table == null)
+      _sessionsToShow.Clear ();
+
+      if (_sessions__ == null || _sessions__.Count <= 0 || _table == null)
          return;
 
-      for (int i = 0; i < _sessions.Count; ++i)
+      Dictionary<int, FilterExpr> filters = null;
+      SettingsHolder.Config?.Filter?.TryGetValue (_proj.Name, out filters);
+
+      _indexLastRow = -1;
+      for (int i = 0; i < _sessions__.Count; ++i)
       {
-         var session = _sessions [i];
+         var session = _sessions__ [i];
+         if (filters != null && IsFiltered (session, filters))
+            continue;
+
+         _sessionsToShow.Add (session);
+
+         ++_indexLastRow;
+
          bool isChanged = _changedSessions.Contains (session.Id);
-         string strID = isChanged ? $"{i + 1}*" : $"{i + 1}";
+         string strID = isChanged ? $"{_indexLastRow + 1}*" : $"{_indexLastRow + 1}";
          _table.AddRow (FormatTextAsChanged (strID,                           isChanged), 
                         FormatTextAsChanged (session.GetStartTimeAsString (), isChanged), 
                         FormatTextAsChanged (session.GetEndTimeAsString (),   isChanged),
                         FormatTextAsChanged (session.GetDuration (),          isChanged));
       }
+
+      if (_selectedLine > _indexLastRow)
+         _selectedLine = _indexLastRow;
+   }
+
+   bool IsFiltered (CodingSession session, Dictionary<int, FilterExpr> filters)
+   {
+      if (session == null || filters == null || filters.Count <= 0)
+         return false;
+
+      foreach (var (column, filter) in filters)
+      {
+         if (filter == null || filter.Expr == null || !filter.Active)
+            continue;
+
+         bool leave = column switch
+         {
+            1 => filter.Check (session.StartDate, session.StartTime),
+            2 => filter.Check (session.EndDate, session.EndTime),
+            3 => filter.Check (session.GetDurationInSeconds ()),
+            _ => true
+         };
+
+         if (!leave)
+            return true;
+      }
+
+      return false;
    }
 
    string FormatTextAsChanged (string text, bool changed)
@@ -244,7 +280,7 @@ internal class SessionsTable
 
    void AddNewSession ()
    {
-      if (_proj == null || _sessions == null)
+      if (_proj == null || _sessions__ == null)
          return;
 
       string [] param  = ["Start date", "Start time", "End date", "End time"];
@@ -263,11 +299,11 @@ internal class SessionsTable
 
       var session = CodingSession.Create (values [0], values [1], values [2], values [3]);
 
-      bool isDataCorrect = ValidateSessions ([.. _sessions, session]);
+      bool isDataCorrect = ValidateSessions ([.. _sessions__, session]);
       if (isDataCorrect)
       {
          DbManager.AddNewSession (session, _proj.Id);
-         _sessions.Add (session);
+         _sessions__.Add (session);
          FillTable ();
       }
 
@@ -276,7 +312,7 @@ internal class SessionsTable
 
    void SortData ()
    {
-      if (_sessions == null || _sessions.Count <= 0)
+      if (_sessions__ == null || _sessions__.Count <= 0)
          return;
 
       if (_columnToSort == _selectedColumn)
@@ -287,23 +323,23 @@ internal class SessionsTable
       if (_columnToSort == 1) // Sort by "Start time"
       {
          if (_sortInAscOrder)
-            _sessions.Sort ((x, y) => x.GetStartTime ().CompareTo (y.GetStartTime ()));
+            _sessions__.Sort ((x, y) => x.GetStartTime ().CompareTo (y.GetStartTime ()));
          else
-            _sessions.Sort ((x, y) => y.GetStartTime ().CompareTo (x.GetStartTime ()));
+            _sessions__.Sort ((x, y) => y.GetStartTime ().CompareTo (x.GetStartTime ()));
       }
       else if (_columnToSort == 2) // Sort by "End time"
       {
          if (_sortInAscOrder)
-            _sessions.Sort ((x, y) => x.GetEndTime ().CompareTo (y.GetEndTime ()));
+            _sessions__.Sort ((x, y) => x.GetEndTime ().CompareTo (y.GetEndTime ()));
          else
-            _sessions.Sort ((x, y) => y.GetEndTime ().CompareTo (x.GetEndTime ()));
+            _sessions__.Sort ((x, y) => y.GetEndTime ().CompareTo (x.GetEndTime ()));
       }
       else // Sort by "Duration"
       {
          if (_sortInAscOrder)
-            _sessions.Sort ((x, y) => x.GetDuration ().CompareTo (y.GetDuration ()));
+            _sessions__.Sort ((x, y) => x.GetDuration ().CompareTo (y.GetDuration ()));
          else
-            _sessions.Sort ((x, y) => y.GetDuration ().CompareTo (x.GetDuration ()));
+            _sessions__.Sort ((x, y) => y.GetDuration ().CompareTo (x.GetDuration ()));
       }
 
       FillTable ();
@@ -318,45 +354,31 @@ internal class SessionsTable
       bool expectDateTime = _selectedColumn == 1 || _selectedColumn == 2;
       string filterText = string.Empty;
 
+      FilterExpr? expr = SettingsHolder.GetFilter (_proj.Name, _selectedColumn);
+      string? currentConfig = expr?.Text ?? null;
+
       for (; ; )
       {
-         filterText = expectDateTime ? Gui.AskFilterDateTime () : Gui.AskFilterDuration ();
+         filterText = expectDateTime ? Gui.AskFilterDateTime (currentConfig) : Gui.AskFilterDuration (currentConfig);
          if (string.IsNullOrEmpty (filterText))
             return;
 
-         Interpreter interpreter = new ();
-         Expression? expr = null;
+         // No changes in text -> no need to update filter
+         if (!string.IsNullOrEmpty (currentConfig) && filterText.Trim () == currentConfig)
+            break;
 
-         try
+         FilterExpr filter = new ();
+         string? message = filter.SetFilterText (filterText);
+         if (!string.IsNullOrEmpty (message))
          {
-            expr = interpreter.Compile (filterText, expectDateTime);
-         }
-         catch (ParseException ex)
-         {
-            Gui.Exception (ex.Message);
+            Gui.Exception (message);
             continue;
          }
 
-         if (expr == null)
-            continue;
-
-         try
-         {
-            if (expectDateTime)
-               interpreter.Run (expr, "20000101", "00000");
-            else
-               interpreter.Run (expr, "00000");
-         }
-         catch (ParseException ex)
-         {
-            Gui.Exception (ex.Message);
-            continue;
-         }
+         SettingsHolder.SaveFilter (_proj.Name, _selectedColumn, filter);
 
          break;
       }
-
-      SettingsHolder.SaveFilter (_proj.Name, _selectedColumn, filterText);
 
       FillTable ();
       UpdateCurrentCell ();
@@ -374,10 +396,7 @@ internal class SessionsTable
       if (!filters.ContainsKey (_selectedColumn))
          return;
 
-      if (!_configuredFilters.ContainsKey (_selectedColumn))
-         _configuredFilters [_selectedColumn] = false;
-      else
-         _configuredFilters [_selectedColumn] = !_configuredFilters [_selectedColumn];
+      filters [_selectedColumn].Active = !filters [_selectedColumn].Active;
 
       FillTable ();
       UpdateCurrentCell ();
@@ -385,10 +404,10 @@ internal class SessionsTable
 
    bool SaveChanges (bool updateGUI)
    {
-      if (_sessions == null || _changedSessions.Count <= 0)
+      if (_sessions__ == null || _changedSessions.Count <= 0)
          return true;
 
-      var sessionsToUpdate = _sessions.Where (x => _changedSessions.Contains (x.Id)).ToList ();
+      var sessionsToUpdate = _sessions__.Where (x => _changedSessions.Contains (x.Id)).ToList ();
       bool isDataCorrect = ValidateSessions (sessionsToUpdate);
 
       if (isDataCorrect)
@@ -457,17 +476,17 @@ internal class SessionsTable
          {
             --_selectedLine;
             if (_selectedLine < 0) // Wrap around
-               _selectedLine = _sessions?.Count - 1 ?? 0;
+               _selectedLine = _indexLastRow;
          }
       }
       else
       {
          if (moveToLimit) // "PgDown" pressed
-            _selectedLine = _sessions?.Count - 1 ?? 0;
+            _selectedLine = _indexLastRow;
          else // "Down arrow" pressed
          {
             ++_selectedLine;
-            if (_selectedLine >= _sessions?.Count) // Wrap around
+            if (_selectedLine > _indexLastRow) // Wrap around
                _selectedLine = 0;
          }
       }
@@ -515,10 +534,10 @@ internal class SessionsTable
    /// </summary>
    void UpdateCurrentCell (bool select = true)
    {
-      if (_sessions == null || _table == null)
+      if (_table == null)
          return;
 
-      var sessions = _sessions [_selectedLine];
+      var sessions = _sessionsToShow [_selectedLine];
 
       string text = _selectedColumn switch
       {
@@ -551,7 +570,7 @@ internal class SessionsTable
    /// <returns></returns>
    bool DeleteCurrentSession ()
    {
-      if (_sessions == null || _table == null)
+      if (_sessions__ == null || _table == null)
          return true;
 
       Gui.Info ($"The session [green]#{_selectedLine + 1}[/] will be deleted.");
@@ -563,11 +582,11 @@ internal class SessionsTable
          return true;
       }
 
-      var session = _sessions [_selectedLine];
+      var session = _sessionsToShow [_selectedLine];
       DbManager.DeleteSession (session.Id);
-      _sessions.RemoveAt (_selectedLine);
+      _sessions__.RemoveAll (x => x.Id == session.Id);
 
-      if (_sessions.Count <= 0)
+      if (_sessions__.Count <= 0)
       {
          if (_proj != null)
          {
@@ -583,8 +602,8 @@ internal class SessionsTable
          return false;
       }
 
-      if (_selectedLine >= _sessions.Count)
-         _selectedLine = _sessions.Count - 1;
+      if (_selectedLine >= _sessionsToShow.Count)
+         _selectedLine = _sessionsToShow.Count - 1;
 
       FillTable ();
       UpdateCurrentCell ();
@@ -597,7 +616,7 @@ internal class SessionsTable
    /// </summary>
    void CorrectRecord ()
    {
-      if (_sessions == null || _sessions.Count <= 0)
+      if (_sessionsToShow.Count <= 0)
          return;
 
       bool isDataChanged = false;
@@ -608,7 +627,7 @@ internal class SessionsTable
 
       if (isDataChanged)
       {
-         _changedSessions.Add (_sessions [_selectedLine].Id);
+         _changedSessions.Add (_sessionsToShow [_selectedLine].Id);
          FillTable ();
       }
 
@@ -617,11 +636,8 @@ internal class SessionsTable
 
    bool CorrectDateTime ()
    {
-      if (_sessions == null)
-         return true;
-
       bool isChanged = false;
-      var session = _sessions [_selectedLine];
+      var session = _sessionsToShow [_selectedLine];
 
       DateTime dt;
       string nameDate, nameTime;
@@ -666,10 +682,7 @@ internal class SessionsTable
 
    bool CorrectDuration ()
    {
-      if (_sessions == null)
-         return true;
-
-      var session = _sessions [_selectedLine];
+      var session = _sessionsToShow [_selectedLine];
 
       string prevDuration = session.GetDuration ();
       string newDuration = Gui.AskDuration (prevDuration);
